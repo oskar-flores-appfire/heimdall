@@ -1,6 +1,7 @@
 import type { Source, Action, PullRequest, HeimdallConfig } from "./types";
 import type { Logger } from "./logger";
 import type { StateManager } from "./state";
+import type { NotifyAction } from "./actions/notify";
 
 export async function runCycle(
   source: Source,
@@ -28,8 +29,19 @@ export async function runCycle(
 
   logger.info(`Processing ${newPrs.length} new PR(s)`);
 
+  // Find the notify action for batch/completion notifications
+  const notifyAction = actions.find((a) => a.name === "notify") as NotifyAction | undefined;
+
+  // Flood protection: batch notification if too many PRs
+  if (notifyAction?.shouldBatch(newPrs.length)) {
+    await notifyAction.notifyBatch(newPrs);
+  }
+
+  // Cap individual notifications
+  const shouldNotifyIndividually = notifyAction && !notifyAction.shouldBatch(newPrs.length);
+
   await Promise.all(
-    newPrs.map(async (pr) => {
+    newPrs.map(async (pr, index) => {
       const repoConfig = config.actions.review.repos[pr.repo];
       if (!repoConfig) {
         logger.warn(`No review config for repo ${pr.repo}, skipping review`);
@@ -39,13 +51,26 @@ export async function runCycle(
 
       for (const action of actions) {
         try {
+          // For notify action: skip if batched, or if over max
+          if (action.name === "notify") {
+            if (!shouldNotifyIndividually || notifyAction!.exceedsMax(index + 1)) {
+              continue;
+            }
+          }
+
           const result = await action.execute(
             pr,
             repoConfig ?? { prompt: "Review PR #{{pr_number}}", cwd: "/tmp" }
           );
+
           if (result.reportPath) {
             await state.markReviewed(pr, result.reportPath);
+            // Send completion notification
+            if (notifyAction) {
+              await notifyAction.notifyComplete(pr, result.reportPath);
+            }
           }
+
           if (!result.success) {
             logger.warn(`Action ${action.name} failed for PR #${pr.number}: ${result.message}`);
           }

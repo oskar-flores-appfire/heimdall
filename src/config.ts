@@ -15,7 +15,7 @@ export const DEFAULT_CONFIG: HeimdallConfig = {
     },
   ],
   actions: {
-    notify: { enabled: true, sound: "Glass" },
+    notify: { enabled: true, sound: "Glass", maxPerCycle: 5, batchThreshold: 3 },
     review: {
       enabled: true,
       command: "claude",

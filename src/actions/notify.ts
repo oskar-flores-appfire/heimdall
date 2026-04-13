@@ -19,7 +19,9 @@ export class NotifyAction implements Action {
 
   constructor(
     private readonly sound: string,
-    private readonly logger: Logger
+    private readonly logger: Logger,
+    private readonly maxPerCycle: number = 5,
+    private readonly batchThreshold: number = 3
   ) {
     this.notifier = detectNotifier();
     if (this.notifier === "none") {
@@ -30,19 +32,13 @@ export class NotifyAction implements Action {
   }
 
   async execute(pr: PullRequest, _repoConfig: RepoConfig): Promise<ActionResult> {
-    const title = "Heimdall";
-    const subtitle = pr.repo;
-    const message = `PR #${pr.number}: ${pr.title}`;
+    return this.notifyStart(pr);
+  }
 
+  async notifyStart(pr: PullRequest): Promise<ActionResult> {
+    const message = `Reviewing PR #${pr.number}: ${pr.title}`;
     try {
-      if (this.notifier === "terminal-notifier") {
-        await this.terminalNotifier(title, subtitle, message, pr.url);
-      } else if (this.notifier === "osascript") {
-        await this.osascript(title, subtitle, message);
-      } else {
-        this.logger.warn(`No notifier available for PR #${pr.number}`);
-      }
-
+      await this.send("Heimdall", pr.repo, message, pr.url, `heimdall-${pr.repo}-${pr.number}`);
       this.logger.info(`Notified: ${message}`);
       return { action: "notify", success: true, message };
     } catch (err) {
@@ -51,31 +47,63 @@ export class NotifyAction implements Action {
     }
   }
 
-  private async terminalNotifier(
+  async notifyComplete(pr: PullRequest, reportPath: string): Promise<ActionResult> {
+    const message = `Review ready: PR #${pr.number} — ${pr.title}`;
+    // Click opens the report file in default editor
+    const openUrl = `file://${reportPath}`;
+    try {
+      await this.send("Heimdall ✓", pr.repo, message, openUrl, `heimdall-${pr.repo}-${pr.number}`);
+      this.logger.info(`Review complete notification: ${message}`);
+      return { action: "notify", success: true, message };
+    } catch (err) {
+      this.logger.error(`Completion notification failed: ${err}`);
+      return { action: "notify", success: false, message: String(err) };
+    }
+  }
+
+  async notifyBatch(prs: PullRequest[]): Promise<ActionResult> {
+    const message = `${prs.length} PRs need review`;
+    const subtitle = [...new Set(prs.map((p) => p.repo))].join(", ");
+    try {
+      await this.send("Heimdall", subtitle, message, prs[0].url, "heimdall-batch");
+      this.logger.info(`Batch notification: ${message}`);
+      return { action: "notify", success: true, message };
+    } catch (err) {
+      this.logger.error(`Batch notification failed: ${err}`);
+      return { action: "notify", success: false, message: String(err) };
+    }
+  }
+
+  shouldBatch(count: number): boolean {
+    return count > this.batchThreshold;
+  }
+
+  exceedsMax(count: number): boolean {
+    return count > this.maxPerCycle;
+  }
+
+  private async send(
     title: string,
     subtitle: string,
     message: string,
-    url: string
+    url: string,
+    group: string
   ): Promise<void> {
-    const proc = Bun.spawn([
-      "terminal-notifier",
-      "-title", title,
-      "-subtitle", subtitle,
-      "-message", message,
-      "-open", url,
-      "-sound", this.sound,
-      "-group", "heimdall",
-    ]);
-    await proc.exited;
-  }
-
-  private async osascript(
-    title: string,
-    subtitle: string,
-    message: string
-  ): Promise<void> {
-    const script = `display notification "${message}" with title "${title}" subtitle "${subtitle}" sound name "${this.sound}"`;
-    const proc = Bun.spawn(["osascript", "-e", script]);
-    await proc.exited;
+    if (this.notifier === "terminal-notifier") {
+      const proc = Bun.spawn([
+        "terminal-notifier",
+        "-title", title,
+        "-subtitle", subtitle,
+        "-message", message,
+        "-open", url,
+        "-sound", this.sound,
+        "-group", group,
+      ]);
+      await proc.exited;
+    } else if (this.notifier === "osascript") {
+      const script = `display notification "${message}" with title "${title}" subtitle "${subtitle}" sound name "${this.sound}"`;
+      const proc = Bun.spawn(["osascript", "-e", script]);
+      await proc.exited;
+    }
   }
 }

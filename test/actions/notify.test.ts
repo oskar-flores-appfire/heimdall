@@ -26,10 +26,29 @@ describe("NotifyAction", () => {
     expect(["terminal-notifier", "osascript", "none"]).toContain(notifier);
   });
 
-  it("executes without throwing", async () => {
+  it("executes start notification without throwing", async () => {
     const action = new NotifyAction("Glass", logger);
-    const result = await action.execute(pr, repoConfig);
+    const result = await action.notifyStart(pr);
     expect(result.action).toBe("notify");
     expect(result.success).toBe(true);
+  });
+
+  it("executes complete notification without throwing", async () => {
+    const action = new NotifyAction("Glass", logger);
+    const result = await action.notifyComplete(pr, "/tmp/review.md");
+    expect(result.action).toBe("notify");
+    expect(result.success).toBe(true);
+  });
+
+  it("detects batch threshold", () => {
+    const action = new NotifyAction("Glass", logger, 5, 3);
+    expect(action.shouldBatch(2)).toBe(false);
+    expect(action.shouldBatch(4)).toBe(true);
+  });
+
+  it("detects max per cycle", () => {
+    const action = new NotifyAction("Glass", logger, 5, 3);
+    expect(action.exceedsMax(5)).toBe(false);
+    expect(action.exceedsMax(6)).toBe(true);
   });
 });

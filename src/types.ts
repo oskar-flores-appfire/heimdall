@@ -46,7 +46,7 @@ export interface SourceConfig {
 }
 
 export interface ActionsConfig {
-  notify: { enabled: boolean; sound: string };
+  notify: { enabled: boolean; sound: string; maxPerCycle: number; batchThreshold: number };
   review: {
     enabled: boolean;
     command: string;
