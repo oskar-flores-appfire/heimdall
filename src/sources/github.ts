@@ -39,7 +39,7 @@ export class GitHubSource implements Source {
       [
         "gh", "pr", "list",
         "--repo", repo,
-        "--search", `${this.trigger}:@me`,
+        "--search", `${this.trigger}:@me -reviewed-by:@me`,
         "--json", "number,title,url,headRefName,baseRefName,author",
         "--limit", "30",
       ],
