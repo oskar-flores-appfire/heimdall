@@ -1,0 +1,70 @@
+import type { Source, PullRequest } from "../types";
+import type { Logger } from "../logger";
+
+interface GhPrJson {
+  number: number;
+  title: string;
+  url: string;
+  headRefName: string;
+  baseRefName: string;
+  author: { login: string };
+}
+
+export class GitHubSource implements Source {
+  readonly name = "github";
+
+  constructor(
+    private readonly repos: string[],
+    private readonly trigger: string,
+    private readonly logger: Logger
+  ) {}
+
+  async poll(): Promise<PullRequest[]> {
+    const allPrs: PullRequest[] = [];
+
+    for (const repo of this.repos) {
+      try {
+        const prs = await this.pollRepo(repo);
+        allPrs.push(...prs);
+      } catch (err) {
+        this.logger.error(`Failed to poll ${repo}: ${err}`);
+      }
+    }
+
+    return allPrs;
+  }
+
+  private async pollRepo(repo: string): Promise<PullRequest[]> {
+    const proc = Bun.spawn(
+      [
+        "gh", "pr", "list",
+        "--repo", repo,
+        "--search", `${this.trigger}:@me`,
+        "--json", "number,title,url,headRefName,baseRefName,author",
+        "--limit", "30",
+      ],
+      { stdout: "pipe", stderr: "pipe" }
+    );
+
+    const exitCode = await proc.exited;
+    if (exitCode !== 0) {
+      const stderr = await new Response(proc.stderr).text();
+      this.logger.error(`gh pr list failed for ${repo}: ${stderr}`);
+      return [];
+    }
+
+    const stdout = await new Response(proc.stdout).text();
+    if (!stdout.trim()) return [];
+
+    const raw: GhPrJson[] = JSON.parse(stdout);
+    return raw.map((pr) => ({
+      number: pr.number,
+      title: pr.title,
+      url: pr.url,
+      headRefName: pr.headRefName,
+      baseRefName: pr.baseRefName,
+      repo,
+      author: pr.author.login,
+    }));
+  }
+}
