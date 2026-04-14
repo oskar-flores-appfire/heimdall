@@ -53,6 +53,8 @@ Two independent processes, separated by a file-based queue:
 
 **Integration method:** Direct Jira REST API via `fetch()`. Zero external dependencies.
 
+**Implementation note:** When implementing the Jira REST API integration, use context7 MCP tool to fetch current Jira Cloud REST API documentation. Do not rely on training data for API endpoints, field names, or query parameters — the API evolves and context7 will provide the latest correct reference.
+
 **Authentication:** API token + email. Token stored via `"env:JIRA_API_TOKEN"` syntax in config (reads from environment variable at runtime).
 
 **Polling:** `GET /rest/api/3/search?jql=<configured JQL>` returns assigned issues. Response normalized into Heimdall's internal `PollResult` type. Deduplication via existing `seen.json` state, keyed by Jira issue key.
