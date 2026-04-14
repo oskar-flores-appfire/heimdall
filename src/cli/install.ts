@@ -1,5 +1,5 @@
 import { homedir } from "os";
-import { join } from "path";
+import { join, dirname } from "path";
 import { existsSync } from "fs";
 import { loadConfig, resolveHomePath } from "../config";
 
@@ -41,14 +41,17 @@ export async function install(): Promise<void> {
   const config = await loadConfig();
   const logPath = resolveHomePath(config.log.file);
 
-  const distBinary = join(process.cwd(), "dist", "heimdall");
+  const projectRoot = existsSync(join(dirname(process.execPath), "..", "build.ts"))
+    ? join(dirname(process.execPath), "..")
+    : join(import.meta.dir, "..", "..");
+  const distBinary = join(projectRoot, "dist", "heimdall");
   let programArgs: string[];
 
   if (existsSync(distBinary)) {
     programArgs = [distBinary, "run"];
   } else {
     const bunPath = Bun.spawnSync(["which", "bun"]).stdout.toString().trim();
-    const scriptPath = join(process.cwd(), "src", "index.ts");
+    const scriptPath = join(projectRoot, "src", "index.ts");
     programArgs = [bunPath, "run", scriptPath, "run"];
   }
 

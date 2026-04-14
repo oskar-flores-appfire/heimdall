@@ -47,12 +47,10 @@ export class NotifyAction implements Action {
     }
   }
 
-  async notifyComplete(pr: PullRequest, reportPath: string): Promise<ActionResult> {
+  async notifyComplete(pr: PullRequest, _reportPath: string): Promise<ActionResult> {
     const message = `Review ready: PR #${pr.number} — ${pr.title}`;
-    // Click opens the report file in default editor
-    const openUrl = `file://${reportPath}`;
     try {
-      await this.send("Heimdall ✓", pr.repo, message, openUrl, `heimdall-${pr.repo}-${pr.number}`);
+      await this.send("Heimdall ✓", pr.repo, message, pr.url, `heimdall-${pr.repo}-${pr.number}`);
       this.logger.info(`Review complete notification: ${message}`);
       return { action: "notify", success: true, message };
     } catch (err) {

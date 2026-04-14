@@ -24,11 +24,6 @@ export function createLogger(config: { file: string; level: LogLevel }): Logger 
     if (LEVELS[level] < minLevel) return;
     const line = `${new Date().toISOString()} [${level.toUpperCase()}] ${msg}\n`;
     appendFileSync(config.file, line);
-    if (level === "error") {
-      console.error(line.trimEnd());
-    } else {
-      console.log(line.trimEnd());
-    }
   }
 
   return {

@@ -38,6 +38,11 @@ switch (command) {
     await uninstall();
     break;
   }
+  case "reinstall": {
+    const { reinstall } = await import("./cli/reinstall");
+    await reinstall();
+    break;
+  }
   default:
     console.log(`
 Heimdall — The All-Seeing PR Guardian
@@ -51,6 +56,7 @@ Commands:
   status       Show running state and recent reviews
   logs         Tail the log file
   install      Generate and load launchd plist
+  reinstall    Stop, rebuild, and reload daemon
   uninstall    Remove launchd plist
     `);
     break;
