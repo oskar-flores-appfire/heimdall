@@ -3,6 +3,7 @@ import { StateManager } from "../src/state";
 import { existsSync, rmSync, mkdirSync } from "fs";
 import type { PullRequest } from "../src/types";
 
+
 const TEST_STATE = "/tmp/heimdall-state-test/seen.json";
 
 const pr1: PullRequest = {
@@ -75,5 +76,34 @@ describe("StateManager", () => {
     const data = await Bun.file(TEST_STATE).json();
     expect(data["org/repo"]["1"]).toBeUndefined();
     expect(data["org/repo"]["2"]).toBeDefined();
+  });
+});
+
+describe("StateManager generic methods", () => {
+  beforeEach(() => {
+    mkdirSync("/tmp/heimdall-state-test", { recursive: true });
+    if (existsSync(TEST_STATE)) rmSync(TEST_STATE);
+  });
+
+  afterEach(() => {
+    rmSync("/tmp/heimdall-state-test", { recursive: true, force: true });
+  });
+
+  it("hasBeenSeen returns false for unseen keys", async () => {
+    const state = new StateManager(TEST_STATE);
+    expect(await state.hasBeenSeen("jira:test", "PROJ-123")).toBe(false);
+  });
+
+  it("hasBeenSeen returns true after markKey", async () => {
+    const state = new StateManager(TEST_STATE);
+    await state.markKey("jira:test", "PROJ-123");
+    expect(await state.hasBeenSeen("jira:test", "PROJ-123")).toBe(true);
+  });
+
+  it("markKey stores custom entry data", async () => {
+    const state = new StateManager(TEST_STATE);
+    await state.markKey("jira:test", "PROJ-456", { reviewed: true });
+    const data = await Bun.file(TEST_STATE).json();
+    expect(data["jira:test"]["PROJ-456"].reviewed).toBe(true);
   });
 });

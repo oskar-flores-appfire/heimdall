@@ -8,11 +8,7 @@ export const DEFAULT_CONFIG_PATH = `${HEIMDALL_DIR}/config.json`;
 export const DEFAULT_CONFIG: HeimdallConfig = {
   interval: 600,
   sources: [
-    {
-      type: "github",
-      repos: [],
-      trigger: "review-requested",
-    },
+    { type: "github", repos: [], trigger: "review-requested" },
   ],
   actions: {
     notify: { enabled: true, sound: "Glass", maxPerCycle: 5, batchThreshold: 3 },
@@ -25,10 +21,37 @@ export const DEFAULT_CONFIG: HeimdallConfig = {
   },
   reports: { dir: `${HEIMDALL_DIR}/reviews` },
   log: { file: `${HEIMDALL_DIR}/heimdall.log`, level: "info" },
+  triage: {
+    threshold: 6,
+    maxSize: "L",
+    model: "sonnet",
+    timeoutMinutes: 120,
+  },
+  worker: {
+    maxParallel: 1,
+    model: "opus",
+    worktreeDir: `${HEIMDALL_DIR}/worktrees`,
+    maxTurns: 100,
+    claudeArgs: ["--permission-mode", "auto", "--output-format", "stream-json"],
+  },
+  costs: {
+    "claude-opus-4-6": { inputPer1k: 0.015, outputPer1k: 0.075 },
+    "claude-sonnet-4-6": { inputPer1k: 0.003, outputPer1k: 0.015 },
+  },
 };
 
 export function resolveHomePath(p: string): string {
   return p.startsWith("~") ? p.replace("~", homedir()) : p;
+}
+
+export function resolveSecret(value: string): string {
+  if (value.startsWith("env:")) {
+    const envVar = value.slice(4);
+    const val = process.env[envVar];
+    if (!val) throw new Error(`Environment variable ${envVar} is not set`);
+    return val;
+  }
+  return value;
 }
 
 function deepMerge(target: any, source: any): any {
@@ -64,6 +87,14 @@ export async function loadConfig(
 }
 
 export async function ensureHeimdallDir(): Promise<void> {
-  mkdirSync(HEIMDALL_DIR, { recursive: true });
-  mkdirSync(resolveHomePath(DEFAULT_CONFIG.reports.dir), { recursive: true });
+  for (const dir of [
+    HEIMDALL_DIR,
+    resolveHomePath(DEFAULT_CONFIG.reports.dir),
+    `${HEIMDALL_DIR}/queue`,
+    `${HEIMDALL_DIR}/triage`,
+    `${HEIMDALL_DIR}/worktrees`,
+    `${HEIMDALL_DIR}/runs`,
+  ]) {
+    mkdirSync(dir, { recursive: true });
+  }
 }

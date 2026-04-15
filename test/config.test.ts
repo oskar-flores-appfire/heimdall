@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from "bun:test";
-import { loadConfig, DEFAULT_CONFIG, resolveHomePath } from "../src/config";
+import { loadConfig, DEFAULT_CONFIG, resolveHomePath, resolveSecret } from "../src/config";
 import { mkdirSync, rmSync, existsSync } from "fs";
 
 const TEST_DIR = "/tmp/heimdall-config-test";
@@ -31,5 +31,21 @@ describe("Config", () => {
     const resolved = resolveHomePath("~/.heimdall/reviews");
     expect(resolved).not.toContain("~");
     expect(resolved).toContain("heimdall/reviews");
+  });
+});
+
+describe("resolveSecret", () => {
+  it("returns plain strings as-is", () => {
+    expect(resolveSecret("my-token-123")).toBe("my-token-123");
+  });
+
+  it("resolves env: prefix to environment variable", () => {
+    process.env.TEST_HEIMDALL_TOKEN = "secret-from-env";
+    expect(resolveSecret("env:TEST_HEIMDALL_TOKEN")).toBe("secret-from-env");
+    delete process.env.TEST_HEIMDALL_TOKEN;
+  });
+
+  it("throws when env var is not set", () => {
+    expect(() => resolveSecret("env:NONEXISTENT_VAR_XYZ")).toThrow("not set");
   });
 });
