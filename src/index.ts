@@ -43,6 +43,16 @@ switch (command) {
     await reinstall();
     break;
   }
+  case "triage": {
+    const { triage } = await import("./cli/triage");
+    await triage();
+    break;
+  }
+  case "approve": {
+    const { approve } = await import("./cli/approve");
+    await approve();
+    break;
+  }
   default:
     console.log(`
 Heimdall — The All-Seeing PR Guardian
@@ -58,6 +68,10 @@ Commands:
   install      Generate and load launchd plist
   reinstall    Stop, rebuild, and reload daemon
   uninstall    Remove launchd plist
+
+Jira Autonomous Implementation:
+  triage <KEY>   View triage report and approve
+  approve <KEY>  Queue issue for implementation
     `);
     break;
 }
