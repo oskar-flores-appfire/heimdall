@@ -17,6 +17,7 @@ export class QueueManager {
   }
 
   async list(): Promise<QueueItem[]> {
+    if (!existsSync(this.dir)) return [];
     const glob = new Bun.Glob("*.json");
     const items: QueueItem[] = [];
     for await (const file of glob.scan(this.dir)) {
