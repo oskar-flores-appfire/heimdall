@@ -43,6 +43,31 @@ switch (command) {
     await reinstall();
     break;
   }
+  case "triage": {
+    const { triage } = await import("./cli/triage");
+    await triage();
+    break;
+  }
+  case "approve": {
+    const { approve } = await import("./cli/approve");
+    await approve();
+    break;
+  }
+  case "worker": {
+    const { workerCmd } = await import("./cli/worker-cmd");
+    await workerCmd();
+    break;
+  }
+  case "queue": {
+    const { queueCmd } = await import("./cli/queue-cmd");
+    await queueCmd();
+    break;
+  }
+  case "clean": {
+    const { clean } = await import("./cli/clean");
+    await clean();
+    break;
+  }
   default:
     console.log(`
 Heimdall — The All-Seeing PR Guardian
@@ -50,14 +75,21 @@ Heimdall — The All-Seeing PR Guardian
 Usage: heimdall <command>
 
 Commands:
-  run          Execute a single poll cycle
-  start        Start the daemon (launchd)
-  stop         Stop the daemon
-  status       Show running state and recent reviews
-  logs         Tail the log file
-  install      Generate and load launchd plist
-  reinstall    Stop, rebuild, and reload daemon
-  uninstall    Remove launchd plist
+  run              Execute a single poll cycle (GitHub + Jira)
+  start            Start the daemon (launchd)
+  stop             Stop the daemon
+  status           Show running state and recent reviews
+  logs             Tail the log file
+  install          Generate and load launchd plist
+  reinstall        Stop, rebuild, and reload daemon
+  uninstall        Remove launchd plist
+
+Jira Autonomous Implementation:
+  triage <KEY>     View triage report and approve
+  approve <KEY>    Queue issue for implementation
+  worker           Start worker (picks up queue items)
+  queue            List queue items with status
+  clean            Remove completed/old worktrees
     `);
     break;
 }

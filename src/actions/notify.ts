@@ -1,4 +1,4 @@
-import type { Action, PullRequest, RepoConfig, ActionResult } from "../types";
+import type { Action, PullRequest, RepoConfig, ActionResult, JiraIssue, TriageReport } from "../types";
 import type { Logger } from "../logger";
 
 type Notifier = "terminal-notifier" | "osascript" | "none";
@@ -80,6 +80,106 @@ export class NotifyAction implements Action {
     return count > this.maxPerCycle;
   }
 
+  async notifyTriage(issue: JiraIssue, report: TriageReport): Promise<ActionResult> {
+    const score = `${report.result.total}/${report.result.max}`;
+    const files = report.result.suggested_files.length;
+    const message = `Score: ${score} (${report.result.total >= 7 ? "High" : "Medium"}) | Size: ${report.result.size} | ${files} file(s)\nReady for implementation`;
+    try {
+      await this.sendTriage(
+        `Heimdall — ${issue.key}`,
+        issue.title,
+        message,
+        `heimdall triage ${issue.key}`,
+        `heimdall approve ${issue.key}`,
+        `heimdall-triage-${issue.key}`
+      );
+      this.logger.info(`Triage notification sent: ${issue.key}`);
+      return { action: "notify", success: true, message };
+    } catch (err) {
+      this.logger.error(`Triage notification failed: ${err}`);
+      return { action: "notify", success: false, message: String(err) };
+    }
+  }
+
+  async notifyNeedsDetail(issue: JiraIssue, report: TriageReport): Promise<ActionResult> {
+    const score = `${report.result.total}/${report.result.max}`;
+    const message = `Score: ${score} — ${report.result.concerns}`;
+    try {
+      await this.send(
+        `Heimdall — ${issue.key}`,
+        issue.title,
+        message,
+        issue.url,
+        `heimdall-triage-${issue.key}`
+      );
+      this.logger.info(`Needs-detail notification: ${issue.key}`);
+      return { action: "notify", success: true, message };
+    } catch (err) {
+      this.logger.error(`Needs-detail notification failed: ${err}`);
+      return { action: "notify", success: false, message: String(err) };
+    }
+  }
+
+  async notifyTooBig(issue: JiraIssue, report: TriageReport): Promise<ActionResult> {
+    const message = `Size: ${report.result.size} — too large for autonomous implementation. Consider decomposing.`;
+    try {
+      await this.send(
+        `Heimdall — ${issue.key}`,
+        issue.title,
+        message,
+        issue.url,
+        `heimdall-triage-${issue.key}`
+      );
+      this.logger.info(`Too-big notification: ${issue.key}`);
+      return { action: "notify", success: true, message };
+    } catch (err) {
+      this.logger.error(`Too-big notification failed: ${err}`);
+      return { action: "notify", success: false, message: String(err) };
+    }
+  }
+
+  async notifyWorkerComplete(
+    issueKey: string,
+    prUrl: string,
+    score: number,
+    cost: string,
+    duration: string
+  ): Promise<ActionResult> {
+    const message = `PR opened | ${score}/9 confidence | ${cost} | ${duration}`;
+    try {
+      await this.send(
+        `Heimdall ✓ — ${issueKey}`,
+        "Implementation complete",
+        message,
+        prUrl,
+        `heimdall-worker-${issueKey}`
+      );
+      this.logger.info(`Worker complete notification: ${issueKey}`);
+      return { action: "notify", success: true, message };
+    } catch (err) {
+      this.logger.error(`Worker complete notification failed: ${err}`);
+      return { action: "notify", success: false, message: String(err) };
+    }
+  }
+
+  async notifyWorkerFailed(issueKey: string, error: string): Promise<ActionResult> {
+    const message = `${issueKey} failed — ${error}`;
+    try {
+      await this.send(
+        `Heimdall ✗ — ${issueKey}`,
+        "Implementation failed",
+        message,
+        "",
+        `heimdall-worker-${issueKey}`
+      );
+      this.logger.info(`Worker failed notification: ${issueKey}`);
+      return { action: "notify", success: true, message };
+    } catch (err) {
+      this.logger.error(`Worker failed notification failed: ${err}`);
+      return { action: "notify", success: false, message: String(err) };
+    }
+  }
+
   private async send(
     title: string,
     subtitle: string,
@@ -94,6 +194,34 @@ export class NotifyAction implements Action {
         "-subtitle", subtitle,
         "-message", message,
         "-open", url,
+        "-sound", this.sound,
+        "-group", group,
+      ]);
+      await proc.exited;
+    } else if (this.notifier === "osascript") {
+      const script = `display notification "${message}" with title "${title}" subtitle "${subtitle}" sound name "${this.sound}"`;
+      const proc = Bun.spawn(["osascript", "-e", script]);
+      await proc.exited;
+    }
+  }
+
+  private async sendTriage(
+    title: string,
+    subtitle: string,
+    message: string,
+    clickCommand: string,
+    approveCommand: string,
+    group: string
+  ): Promise<void> {
+    if (this.notifier === "terminal-notifier") {
+      const wrapperScript = `if [ "$TERMINAL_NOTIFIER_ACTIVATION_TYPE" = "actionClicked" ]; then ${approveCommand}; else ${clickCommand}; fi`;
+      const proc = Bun.spawn([
+        "terminal-notifier",
+        "-title", title,
+        "-subtitle", subtitle,
+        "-message", message,
+        "-execute", wrapperScript,
+        "-actions", "Approve",
         "-sound", this.sound,
         "-group", group,
       ]);
