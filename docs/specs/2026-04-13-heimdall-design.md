@@ -210,18 +210,50 @@ Adding a new repo requires two edits:
 
 ## State Management
 
-`~/.heimdall/seen.json`:
+### Why
+
+Heimdall runs as a polling daemon — every 10 minutes (by default) it queries GitHub for PRs awaiting review. Without persistent state, the same PR would trigger notifications and Claude reviews on every single cycle. The seen state prevents duplicate processing and lets each PR be reviewed exactly once.
+
+### What It Tracks
+
+`~/.heimdall/seen.json` — a nested map of `repo → PR number → SeenEntry`:
 
 ```jsonc
 {
   "appfire-team/signal-iq": {
-    "53": { "seenAt": "2026-04-13T10:30:00Z", "reviewed": true, "reportPath": "..." },
-    "42": { "seenAt": "2026-04-12T14:00:00Z", "reviewed": true, "reportPath": "..." }
+    "53": { "seenAt": "2026-04-13T10:30:00Z", "reviewed": true, "reportPath": "~/.heimdall/reviews/appfire-team/signal-iq/PR-53.md" },
+    "42": { "seenAt": "2026-04-12T14:00:00Z", "reviewed": false }
   }
 }
 ```
 
-Cleanup: entries older than 30 days are pruned on each cycle.
+Each entry stores:
+
+| Field | Type | Purpose |
+|---|---|---|
+| `seenAt` | ISO 8601 string | When the PR was first detected — used for pruning |
+| `reviewed` | boolean | Whether the Claude review has completed |
+| `reportPath` | string (optional) | Path to the generated review report (set on completion) |
+
+### Lifecycle
+
+A PR moves through three stages in the seen state:
+
+```
+1. UNSEEN   — PR not in seen.json → filterNew() returns it as new work
+2. SEEN     — markSeen() adds entry with reviewed: false (immediately on detection)
+3. REVIEWED — markReviewed() sets reviewed: true + reportPath (after Claude finishes)
+```
+
+**Why mark seen before review?** If Heimdall crashes mid-review, the PR won't be re-queued on the next cycle. The `reviewed: false` flag lets us distinguish incomplete reviews from completed ones.
+
+### Pruning
+
+Entries older than 30 days are pruned at the end of each poll cycle via `prune()`. This prevents `seen.json` from growing indefinitely and allows old PRs to be re-reviewed if they're reopened or re-requested.
+
+### Corruption Recovery
+
+If `seen.json` is missing or corrupted, the state manager starts from an empty state. Worst case: already-reviewed PRs get processed once more on the next cycle.
 
 ## launchd Integration
 
