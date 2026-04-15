@@ -52,6 +52,22 @@ export class StateManager {
     await this.save(state);
   }
 
+  async hasBeenSeen(namespace: string, key: string): Promise<boolean> {
+    const state = await this.load();
+    return !!state[namespace]?.[key];
+  }
+
+  async markKey(namespace: string, key: string, entry?: Partial<SeenEntry>): Promise<void> {
+    const state = await this.load();
+    if (!state[namespace]) state[namespace] = {};
+    state[namespace][key] = {
+      seenAt: new Date().toISOString(),
+      reviewed: false,
+      ...entry,
+    };
+    await this.save(state);
+  }
+
   async prune(maxAgeDays: number): Promise<void> {
     const state = await this.load();
     const cutoff = Date.now() - maxAgeDays * 24 * 60 * 60 * 1000;
