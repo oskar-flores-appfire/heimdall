@@ -6,7 +6,10 @@ import { GitHubSource } from "../sources/github";
 import { NotifyAction } from "../actions/notify";
 import { ReviewAction } from "../actions/review";
 import { runCycle } from "../scheduler";
-import type { Action } from "../types";
+import { JiraSource } from "../sources/jira";
+import { TriageAction } from "../actions/triage";
+import { runJiraCycle } from "../jira-cycle";
+import type { Action, JiraSourceConfig } from "../types";
 
 export async function run(): Promise<void> {
   await ensureHeimdallDir();
@@ -47,13 +50,6 @@ export async function run(): Promise<void> {
 
   logger.info("Heimdall run — single poll cycle");
 
-  const sourceConfig = config.sources[0];
-  if (!sourceConfig || sourceConfig.repos.length === 0) {
-    logger.error("No repos configured. Edit ~/.heimdall/config.json");
-    process.exit(1);
-  }
-
-  const source = new GitHubSource(sourceConfig.repos, sourceConfig.trigger, logger);
   const state = new StateManager(resolveHomePath("~/.heimdall/seen.json"));
   const actions: Action[] = [];
 
@@ -72,5 +68,43 @@ export async function run(): Promise<void> {
     );
   }
 
-  await runCycle(source, actions, state, config, logger);
+  // Handle GitHub sources
+  const githubSources = config.sources.filter((s) => s.type === "github");
+  for (const srcConfig of githubSources) {
+    if (srcConfig.type !== "github") continue;
+    if (srcConfig.repos.length === 0) {
+      logger.warn("No repos configured for GitHub source. Skipping.");
+      continue;
+    }
+    const source = new GitHubSource(srcConfig.repos, srcConfig.trigger, logger);
+    await runCycle(source, actions, state, config, logger);
+  }
+
+  // Handle Jira sources
+  for (const srcConfig of config.sources) {
+    if (srcConfig.type === "jira") {
+      const jiraConfig = srcConfig as JiraSourceConfig;
+      const jiraSource = new JiraSource(jiraConfig, logger);
+      const triageAction = new TriageAction(config.triage, logger);
+      const notifyAction = actions.find((a) => a.name === "notify") as NotifyAction | undefined;
+
+      await runJiraCycle({
+        poll: () => jiraSource.poll(),
+        triage: (issue) => triageAction.triage(issue),
+        notify: async (issue, report) => {
+          if (!notifyAction) return;
+          if (report.verdict === "ready") {
+            await notifyAction.notifyTriage(issue, report);
+          } else if (report.verdict === "needs_detail") {
+            await notifyAction.notifyNeedsDetail(issue, report);
+          } else {
+            await notifyAction.notifyTooBig(issue, report);
+          }
+        },
+        state,
+        namespace: `jira:${jiraConfig.baseUrl}`,
+        logger,
+      });
+    }
+  }
 }
