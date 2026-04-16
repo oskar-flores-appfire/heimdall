@@ -2,7 +2,7 @@ import { existsSync } from "fs";
 import { join } from "path";
 import { HEIMDALL_DIR, resolveHomePath, loadConfig } from "../config";
 import { QueueManager } from "../queue";
-import type { QueueItem, TriageReport, JiraSourceConfig } from "../types";
+import type { QueueItem, TriageReport, JiraSourceConfig, JiraProjectConfig } from "../types";
 
 export async function approve(): Promise<void> {
   const issueKey = process.argv[3];
@@ -22,20 +22,18 @@ export async function approve(): Promise<void> {
   const config = await loadConfig();
 
   const project = report.issue.project;
-  let repo = "";
-  let cwd = "";
+  let projectConfig: JiraProjectConfig | undefined;
   for (const source of config.sources) {
     if (source.type === "jira") {
       const jiraConfig = source as JiraSourceConfig;
       if (jiraConfig.projects[project]) {
-        repo = jiraConfig.projects[project].repo;
-        cwd = jiraConfig.projects[project].cwd;
+        projectConfig = jiraConfig.projects[project];
         break;
       }
     }
   }
 
-  if (!repo || !cwd) {
+  if (!projectConfig) {
     console.error(`No project mapping found for ${project}. Check config.json sources.`);
     process.exit(1);
   }
@@ -56,8 +54,10 @@ export async function approve(): Promise<void> {
     approvedAt: new Date().toISOString(),
     status: "pending",
     triageReport: join(heimdallDir, "triage", `${issueKey}.md`),
-    repo,
-    cwd: resolveHomePath(cwd),
+    repo: projectConfig.repo,
+    cwd: resolveHomePath(projectConfig.cwd),
+    systemPromptFile: projectConfig.systemPromptFile,
+    allowedTools: projectConfig.allowedTools,
   };
 
   await queue.enqueue(item);

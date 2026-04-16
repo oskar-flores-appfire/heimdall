@@ -1,6 +1,8 @@
-import { describe, it, expect } from "bun:test";
+import { describe, it, expect, beforeEach, afterEach } from "bun:test";
 import { calculateCost, parseStreamJson, formatDuration, buildImplementationPrompt } from "../src/worker";
 import type { QueueItem, CostConfig } from "../src/types";
+import { mkdirSync, rmSync, existsSync } from "fs";
+import { join } from "path";
 
 const testCosts: CostConfig = {
   "claude-opus-4-6": { inputPer1k: 0.015, outputPer1k: 0.075 },
@@ -99,5 +101,58 @@ describe("QueueItem skill fields", () => {
       allowedTools: ["Read", "Edit"],
     };
     expect(item.allowedTools).toEqual(["Read", "Edit"]);
+  });
+});
+
+const APPROVE_TEST_DIR = "/tmp/heimdall-approve-test";
+
+describe("approve config forwarding", () => {
+  beforeEach(() => {
+    mkdirSync(APPROVE_TEST_DIR, { recursive: true });
+    mkdirSync(join(APPROVE_TEST_DIR, "queue"), { recursive: true });
+    mkdirSync(join(APPROVE_TEST_DIR, "triage"), { recursive: true });
+  });
+
+  afterEach(() => {
+    if (existsSync(APPROVE_TEST_DIR)) rmSync(APPROVE_TEST_DIR, { recursive: true });
+  });
+
+  it("includes systemPromptFile in queue item when project config has it", async () => {
+    const triageReport = {
+      issue: { key: "SIQ-42", title: "Test", description: "Desc", url: "", project: "SIQ", assignee: "", status: "", issueType: "" },
+      result: { criteria: { acceptance_clarity: 3, scope_boundedness: 3, technical_detail: 3 }, total: 9, max: 9, size: "S", verdict: "ready", concerns: "", suggested_files: [] },
+      verdict: "ready",
+      timestamp: new Date().toISOString(),
+    };
+    await Bun.write(join(APPROVE_TEST_DIR, "triage", "SIQ-42.json"), JSON.stringify(triageReport));
+    await Bun.write(join(APPROVE_TEST_DIR, "triage", "SIQ-42.md"), "# Triage");
+
+    const { QueueManager } = await import("../src/queue");
+    const queue = new QueueManager(join(APPROVE_TEST_DIR, "queue"));
+
+    const projectConfig = {
+      repo: "appfire-team/signal-iq",
+      cwd: "/code/signal-iq",
+      systemPromptFile: "/code/signal-iq/.claude/skills/signal-iq-review",
+      allowedTools: ["Read", "Edit"],
+    };
+
+    const item: import("../src/types").QueueItem = {
+      issueKey: "SIQ-42",
+      title: triageReport.issue.title,
+      description: triageReport.issue.description,
+      approvedAt: new Date().toISOString(),
+      status: "pending",
+      triageReport: join(APPROVE_TEST_DIR, "triage", "SIQ-42.md"),
+      repo: projectConfig.repo,
+      cwd: projectConfig.cwd,
+      systemPromptFile: projectConfig.systemPromptFile,
+      allowedTools: projectConfig.allowedTools,
+    };
+
+    await queue.enqueue(item);
+    const retrieved = await queue.get("SIQ-42");
+    expect(retrieved?.systemPromptFile).toBe("/code/signal-iq/.claude/skills/signal-iq-review");
+    expect(retrieved?.allowedTools).toEqual(["Read", "Edit"]);
   });
 });
