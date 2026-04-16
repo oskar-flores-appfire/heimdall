@@ -52,7 +52,7 @@ describe("formatDuration", () => {
 });
 
 describe("buildImplementationPrompt", () => {
-  it("includes issue key and title", () => {
+  it("includes issue key, title, description, triage, and working directory", () => {
     const item: QueueItem = {
       issueKey: "PROJ-123",
       title: "Auth refactor",
@@ -70,6 +70,9 @@ describe("buildImplementationPrompt", () => {
     expect(prompt).toContain("Refactor auth to use JWT");
     expect(prompt).toContain("/worktrees/PROJ-123");
     expect(prompt).toContain("Score: 7/9");
+    expect(prompt).toContain("## Requirements");
+    expect(prompt).toContain("## Triage Analysis");
+    expect(prompt).toContain("Gate 1");
   });
 });
 

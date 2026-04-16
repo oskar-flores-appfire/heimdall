@@ -78,19 +78,16 @@ export function buildImplementationPrompt(
 ): string {
   return `You are implementing Jira issue ${item.issueKey}: ${item.title}
 
-## Issue Description
+## Requirements
 ${item.description}
 
 ## Triage Analysis
 ${triageContent}
 
-## Instructions
-- Working directory: ${worktreePath}
-- Use the brainstorming skill if the approach isn't obvious
-- Use the writing-plans skill to create a plan before coding
-- Run tests after implementation
-- Commit your changes with a descriptive message referencing ${item.issueKey}
-- If you get stuck or tests won't pass after 3 attempts, commit what you have and stop`;
+## Working Directory
+${worktreePath}
+
+Follow the workflow defined in your system prompt. Start at Gate 1.`;
 }
 
 // --- PR body builder ---
