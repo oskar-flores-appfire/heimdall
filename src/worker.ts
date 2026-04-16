@@ -174,7 +174,7 @@ export class Worker {
 
       const implStart = Date.now();
       const prompt = buildImplementationPrompt(item, triageContent, worktreePath);
-      const claudeResult = await this.spawnClaude(prompt, worktreePath);
+      const claudeResult = await this.spawnClaude(prompt, worktreePath, item);
       const implSeconds = (Date.now() - implStart) / 1000;
 
       const streamResult = parseStreamJson(claudeResult.stdout);
@@ -280,7 +280,11 @@ export class Worker {
     }
   }
 
-  private async spawnClaude(prompt: string, cwd: string): Promise<{ stdout: string; stderr: string; exitCode: number }> {
+  private async spawnClaude(
+    prompt: string,
+    cwd: string,
+    item: QueueItem
+  ): Promise<{ stdout: string; stderr: string; exitCode: number }> {
     const args = [
       "claude",
       "-p",
@@ -291,6 +295,21 @@ export class Worker {
       "--max-turns",
       String(this.config.worker.maxTurns),
     ];
+
+    if (item.systemPromptFile) {
+      const resolvedPath = resolveHomePath(item.systemPromptFile);
+      if (existsSync(resolvedPath)) {
+        const content = await Bun.file(resolvedPath).text();
+        args.push("--append-system-prompt", content);
+        this.logger.info(`Injecting system prompt from ${resolvedPath}`);
+      } else {
+        this.logger.warn(`systemPromptFile not found: ${resolvedPath}`);
+      }
+    }
+
+    if (item.allowedTools?.length) {
+      args.push("--allowlist-tools", item.allowedTools.join(","));
+    }
 
     this.logger.info(`Spawning Claude in ${cwd}`);
     const proc = Bun.spawn(args, {
