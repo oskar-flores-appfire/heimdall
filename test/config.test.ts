@@ -48,4 +48,70 @@ describe("resolveSecret", () => {
   it("throws when env var is not set", () => {
     expect(() => resolveSecret("env:NONEXISTENT_VAR_XYZ")).toThrow("not set");
   });
+
+  it("resolves file: prefix by reading file contents", async () => {
+    const secretFile = `${TEST_DIR}/test-secret`;
+    await Bun.write(secretFile, "token-from-file\n");
+    expect(resolveSecret(`file:${secretFile}`)).toBe("token-from-file");
+  });
+
+  it("throws when secret file does not exist", () => {
+    expect(() => resolveSecret("file:/tmp/nonexistent-secret")).toThrow("not found");
+  });
+});
+
+describe("JiraProjectConfig", () => {
+  it("loads jira source with systemPromptFile in project config", async () => {
+    const configWithSkill = {
+      sources: [
+        {
+          type: "jira",
+          baseUrl: "https://team.atlassian.net",
+          email: "test@test.com",
+          apiToken: "token",
+          jql: "assignee = currentUser()",
+          projects: {
+            SIQ: {
+              repo: "appfire-team/signal-iq",
+              cwd: "~/code/signal-iq",
+              systemPromptFile: "~/code/signal-iq/.claude/skills/signal-iq-review",
+            },
+          },
+        },
+      ],
+    };
+    await Bun.write(TEST_CONFIG, JSON.stringify(configWithSkill));
+    const config = await loadConfig(TEST_CONFIG);
+    const jiraSource = config.sources.find((s) => s.type === "jira");
+    expect(jiraSource).toBeDefined();
+    const jira = jiraSource as import("../src/types").JiraSourceConfig;
+    expect(jira.projects.SIQ.systemPromptFile).toBe(
+      "~/code/signal-iq/.claude/skills/signal-iq-review"
+    );
+  });
+
+  it("loads jira source with allowedTools in project config", async () => {
+    const configWithTools = {
+      sources: [
+        {
+          type: "jira",
+          baseUrl: "https://team.atlassian.net",
+          email: "test@test.com",
+          apiToken: "token",
+          jql: "assignee = currentUser()",
+          projects: {
+            SIQ: {
+              repo: "appfire-team/signal-iq",
+              cwd: "~/code/signal-iq",
+              allowedTools: ["Read", "Edit", "Write", "Bash"],
+            },
+          },
+        },
+      ],
+    };
+    await Bun.write(TEST_CONFIG, JSON.stringify(configWithTools));
+    const config = await loadConfig(TEST_CONFIG);
+    const jira = config.sources.find((s) => s.type === "jira") as import("../src/types").JiraSourceConfig;
+    expect(jira.projects.SIQ.allowedTools).toEqual(["Read", "Edit", "Write", "Bash"]);
+  });
 });

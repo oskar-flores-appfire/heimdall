@@ -48,13 +48,20 @@ export interface GitHubSourceConfig {
   trigger: "review-requested";
 }
 
+export interface JiraProjectConfig {
+  repo: string;
+  cwd: string;
+  systemPromptFile?: string;
+  allowedTools?: string[];
+}
+
 export interface JiraSourceConfig {
   type: "jira";
   baseUrl: string;
   email: string;
   apiToken: string;
   jql: string;
-  projects: Record<string, { repo: string; cwd: string }>;
+  projects: Record<string, JiraProjectConfig>;
 }
 
 export type SourceConfig = GitHubSourceConfig | JiraSourceConfig;
