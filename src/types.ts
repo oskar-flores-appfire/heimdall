@@ -141,6 +141,8 @@ export interface QueueItem {
   branch?: string;
   prUrl?: string;
   error?: string;
+  systemPromptFile?: string;
+  allowedTools?: string[];
 }
 
 export interface ImplementationSummary {

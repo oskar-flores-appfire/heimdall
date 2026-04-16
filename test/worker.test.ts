@@ -69,3 +69,35 @@ describe("buildImplementationPrompt", () => {
     expect(prompt).toContain("Score: 7/9");
   });
 });
+
+describe("QueueItem skill fields", () => {
+  it("accepts optional systemPromptFile", () => {
+    const item: QueueItem = {
+      issueKey: "SIQ-42",
+      title: "Test",
+      description: "Test desc",
+      approvedAt: "",
+      status: "pending",
+      triageReport: "/path/report.md",
+      repo: "org/repo",
+      cwd: "/path/to/repo",
+      systemPromptFile: "~/code/signal-iq/.claude/skills/signal-iq-review",
+    };
+    expect(item.systemPromptFile).toBe("~/code/signal-iq/.claude/skills/signal-iq-review");
+  });
+
+  it("accepts optional allowedTools", () => {
+    const item: QueueItem = {
+      issueKey: "SIQ-42",
+      title: "Test",
+      description: "Test desc",
+      approvedAt: "",
+      status: "pending",
+      triageReport: "/path/report.md",
+      repo: "org/repo",
+      cwd: "/path/to/repo",
+      allowedTools: ["Read", "Edit"],
+    };
+    expect(item.allowedTools).toEqual(["Read", "Edit"]);
+  });
+});
