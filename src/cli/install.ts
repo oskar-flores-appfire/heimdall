@@ -7,6 +7,33 @@ const PLIST_DIR = join(homedir(), "Library", "LaunchAgents");
 export const PLIST_PATH = join(PLIST_DIR, `${PLIST_NAME}.plist`);
 export { PLIST_NAME };
 
+// Env vars to forward from the installing shell into the launchd plist.
+// Captures PATH, SSL certs (corporate proxies), and common API keys.
+const FORWARDED_ENV_KEYS = [
+  "PATH",
+  "HOME",
+  "NODE_EXTRA_CA_CERTS",
+  "REQUESTS_CA_BUNDLE",
+  "SSL_CERT_FILE",
+  "ANTHROPIC_API_KEY",
+  "GITHUB_TOKEN",
+];
+
+function buildEnvDict(): string {
+  const entries: string[] = [];
+  for (const key of FORWARDED_ENV_KEYS) {
+    const value = process.env[key];
+    if (value) {
+      entries.push(`    <key>${key}</key>\n    <string>${value}</string>`);
+    }
+  }
+  // Always ensure a usable PATH even if not in current env
+  if (!process.env.PATH) {
+    entries.push(`    <key>PATH</key>\n    <string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string>`);
+  }
+  return entries.join("\n");
+}
+
 function generatePlist(programArgs: string[], logPath: string, interval: number): string {
   return `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
@@ -29,8 +56,7 @@ ${programArgs.map(a => `    <string>${a}</string>`).join("\n")}
   <true/>
   <key>EnvironmentVariables</key>
   <dict>
-    <key>PATH</key>
-    <string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string>
+${buildEnvDict()}
   </dict>
 </dict>
 </plist>`;
