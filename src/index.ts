@@ -68,6 +68,11 @@ switch (command) {
     await clean();
     break;
   }
+  case "open": {
+    const { open } = await import("./cli/open");
+    await open();
+    break;
+  }
   default:
     console.log(`
 Heimdall — The All-Seeing PR Guardian
@@ -90,6 +95,7 @@ Jira Autonomous Implementation:
   worker           Start worker (picks up queue items)
   queue            List queue items with status
   clean            Remove completed/old worktrees
+  open <number>    Open a review in browser (detects repo from cwd)
     `);
     break;
 }
