@@ -25,3 +25,13 @@ test("handles verdict inside code block (real report format)", () => {
   const content = `\`\`\`\nVERDICT: **PASS (conditional — fix violations before merge)**\n\`\`\``;
   expect(parseVerdict(content)).toBe("PASS (conditional)");
 });
+
+test("parses plain text verdict without bold markers", () => {
+  const content = `VERDICT: PASS (conditional — fix violations before merge)`;
+  expect(parseVerdict(content)).toBe("PASS (conditional)");
+});
+
+test("parses plain FAIL verdict without bold markers", () => {
+  const content = `VERDICT: FAIL`;
+  expect(parseVerdict(content)).toBe("FAIL");
+});
