@@ -63,6 +63,7 @@ export async function run(): Promise<void> {
         config.actions.review.command,
         config.actions.review.defaultArgs,
         resolveHomePath(config.reports.dir),
+        resolveHomePath("~/.heimdall/review-worktrees"),
         logger
       )
     );

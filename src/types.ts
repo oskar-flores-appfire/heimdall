@@ -80,6 +80,7 @@ export interface RepoConfig {
   prompt: string;
   cwd: string;
   systemPromptFile?: string;
+  reviewPromptFile?: string;
   allowedTools?: string[];
 }
 

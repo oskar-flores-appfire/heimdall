@@ -1,6 +1,5 @@
 import { homedir } from "os";
-import { join, dirname } from "path";
-import { existsSync } from "fs";
+import { join } from "path";
 import { loadConfig, resolveHomePath } from "../config";
 
 const PLIST_NAME = "com.heimdall.watcher";
@@ -41,18 +40,14 @@ export async function install(): Promise<void> {
   const config = await loadConfig();
   const logPath = resolveHomePath(config.log.file);
 
-  const projectRoot = existsSync(join(dirname(process.execPath), "..", "build.ts"))
-    ? join(dirname(process.execPath), "..")
-    : join(import.meta.dir, "..", "..");
-  const distBinary = join(projectRoot, "dist", "heimdall");
+  const isCompiled = !process.execPath.endsWith("bun");
   let programArgs: string[];
 
-  if (existsSync(distBinary)) {
-    programArgs = [distBinary, "run"];
+  if (isCompiled) {
+    programArgs = [process.execPath, "run"];
   } else {
-    const bunPath = Bun.spawnSync(["which", "bun"]).stdout.toString().trim();
-    const scriptPath = join(projectRoot, "src", "index.ts");
-    programArgs = [bunPath, "run", scriptPath, "run"];
+    const entryPoint = join(import.meta.dir, "..", "index.ts");
+    programArgs = [process.execPath, entryPoint, "run"];
   }
 
   const plistContent = generatePlist(programArgs, logPath, config.interval);

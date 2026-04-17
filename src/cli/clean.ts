@@ -47,5 +47,24 @@ export async function clean(): Promise<void> {
     }
   }
 
+  // Clean review worktrees (ephemeral — always safe to remove)
+  const reviewWorktreeDir = join(heimdallDir, "review-worktrees");
+  if (existsSync(reviewWorktreeDir)) {
+    const reviewEntries = readdirSync(reviewWorktreeDir);
+    for (const entry of reviewEntries) {
+      const worktreePath = join(reviewWorktreeDir, entry);
+      const proc = Bun.spawn(
+        ["git", "worktree", "remove", worktreePath, "--force"],
+        { stdout: "pipe", stderr: "pipe" }
+      );
+      await proc.exited;
+      if (existsSync(worktreePath)) {
+        rmSync(worktreePath, { recursive: true, force: true });
+      }
+      console.log(`Cleaned review worktree: ${entry}`);
+      cleaned++;
+    }
+  }
+
   console.log(`\nCleaned ${cleaned} worktree(s).`);
 }

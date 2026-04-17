@@ -98,6 +98,7 @@ export async function ensureHeimdallDir(): Promise<void> {
     `${HEIMDALL_DIR}/queue`,
     `${HEIMDALL_DIR}/triage`,
     `${HEIMDALL_DIR}/worktrees`,
+    `${HEIMDALL_DIR}/review-worktrees`,
     `${HEIMDALL_DIR}/runs`,
   ]) {
     mkdirSync(dir, { recursive: true });

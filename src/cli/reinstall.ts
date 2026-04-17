@@ -1,8 +1,14 @@
-import { join, dirname } from "path";
+import { join } from "path";
 import { PLIST_PATH } from "./install";
 import { existsSync } from "fs";
 
 export async function reinstall(): Promise<void> {
+  const isCompiled = !process.execPath.endsWith("bun");
+  if (isCompiled) {
+    console.error("reinstall requires source access. Run: bun run src/index.ts reinstall");
+    process.exit(1);
+  }
+
   // 1. Stop if running
   if (existsSync(PLIST_PATH)) {
     Bun.spawnSync(["launchctl", "unload", PLIST_PATH]);
@@ -10,11 +16,7 @@ export async function reinstall(): Promise<void> {
   }
 
   // 2. Rebuild
-  // When running as compiled binary, import.meta.dir is "/", so derive
-  // project root from the executable path (dist/heimdall -> project root)
-  const projectRoot = existsSync(join(import.meta.dir, "build.ts"))
-    ? import.meta.dir
-    : join(dirname(process.execPath), "..");
+  const projectRoot = join(import.meta.dir, "..", "..");
   const buildScript = join(projectRoot, "build.ts");
   console.log("Building...");
   const build = Bun.spawnSync(["bun", "run", buildScript], { cwd: projectRoot });
