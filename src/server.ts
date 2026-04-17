@@ -1,11 +1,10 @@
 import { Glob } from "bun";
 import { join } from "path";
 import { existsSync } from "fs";
-import type { HeimdallConfig } from "./types";
+import type { HeimdallConfig, ReviewVerdict } from "./types";
 import type { Logger } from "./logger";
 import { parseVerdict } from "./verdict";
 import { resolveHomePath } from "./config";
-import type { ReviewVerdict } from "./types";
 
 // --- Types ---
 
