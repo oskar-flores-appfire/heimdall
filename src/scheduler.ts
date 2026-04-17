@@ -2,6 +2,7 @@ import type { Source, Action, PullRequest, HeimdallConfig } from "./types";
 import type { Logger } from "./logger";
 import type { StateManager } from "./state";
 import type { NotifyAction } from "./actions/notify";
+import { parseVerdict } from "./verdict";
 
 export async function runCycle(
   source: Source,
@@ -65,9 +66,11 @@ export async function runCycle(
 
           if (result.reportPath) {
             await state.markReviewed(pr, result.reportPath);
-            // Send completion notification
             if (notifyAction) {
-              await notifyAction.notifyComplete(pr, result.reportPath);
+              const content = await Bun.file(result.reportPath).text();
+              const verdict = parseVerdict(content);
+              const reviewUrl = `http://localhost:${config.server.port}/reviews/${pr.repo}/PR-${pr.number}`;
+              await notifyAction.notifyComplete(pr, result.reportPath, verdict, reviewUrl);
             }
           }
 
