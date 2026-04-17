@@ -10,5 +10,8 @@
     "dev": "bun run src/index.ts",
     "test": "bun test",
     "build": "bun run build.ts"
+  },
+  "dependencies": {
+    "marked": "^18.0.1"
   }
 }

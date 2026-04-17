@@ -1,6 +1,7 @@
 import { Glob } from "bun";
 import { join } from "path";
 import { existsSync } from "fs";
+import { marked } from "marked";
 import type { HeimdallConfig, ReviewVerdict } from "./types";
 import type { Logger } from "./logger";
 import { parseVerdict } from "./verdict";
@@ -78,136 +79,7 @@ ${body}
 // --- Markdown to HTML ---
 
 export function markdownToHtml(md: string): string {
-  // Extract fenced code blocks first
-  const codeBlocks: string[] = [];
-  let text = md.replace(/```(\w*)\n([\s\S]*?)```/g, (_match, lang, code) => {
-    const escaped = code
-      .replace(/&/g, "&amp;")
-      .replace(/</g, "&lt;")
-      .replace(/>/g, "&gt;");
-    const placeholder = `%%CODEBLOCK_${codeBlocks.length}%%`;
-    codeBlocks.push(
-      `<pre><code class="language-${lang || "text"}">${escaped}</code></pre>`
-    );
-    return placeholder;
-  });
-
-  const lines = text.split("\n");
-  const out: string[] = [];
-  let inTable = false;
-  let inList = false;
-
-  for (let i = 0; i < lines.length; i++) {
-    let line = lines[i];
-
-    // Code block placeholder — pass through
-    if (line.match(/^%%CODEBLOCK_\d+%%$/)) {
-      if (inList) { out.push("</ul>"); inList = false; }
-      if (inTable) { out.push("</table>"); inTable = false; }
-      out.push(line);
-      continue;
-    }
-
-    // Horizontal rule
-    if (/^---+\s*$/.test(line)) {
-      if (inList) { out.push("</ul>"); inList = false; }
-      if (inTable) { out.push("</table>"); inTable = false; }
-      out.push("<hr>");
-      continue;
-    }
-
-    // Headers
-    const headerMatch = line.match(/^(#{1,6})\s+(.*)$/);
-    if (headerMatch) {
-      if (inList) { out.push("</ul>"); inList = false; }
-      if (inTable) { out.push("</table>"); inTable = false; }
-      const level = headerMatch[1].length;
-      out.push(`<h${level}>${inlineFormat(headerMatch[2])}</h${level}>`);
-      continue;
-    }
-
-    // Table row
-    if (line.trim().startsWith("|") && line.trim().endsWith("|")) {
-      if (inList) { out.push("</ul>"); inList = false; }
-      // Separator row — skip
-      if (/^\|[\s\-:|]+\|$/.test(line.trim())) {
-        continue;
-      }
-      const cells = line
-        .trim()
-        .slice(1, -1)
-        .split("|")
-        .map((c) => c.trim());
-
-      if (!inTable) {
-        inTable = true;
-        out.push("<table>");
-        // First row is header
-        out.push(
-          "<tr>" + cells.map((c) => `<th>${inlineFormat(c)}</th>`).join("") + "</tr>"
-        );
-        continue;
-      }
-      out.push(
-        "<tr>" + cells.map((c) => `<td>${inlineFormat(c)}</td>`).join("") + "</tr>"
-      );
-      continue;
-    }
-
-    // Close table if no longer in table rows
-    if (inTable && !line.trim().startsWith("|")) {
-      out.push("</table>");
-      inTable = false;
-    }
-
-    // Unordered list items
-    if (/^[-*]\s+/.test(line)) {
-      if (!inList) { out.push("<ul>"); inList = true; }
-      let content = line.replace(/^[-*]\s+/, "");
-      // Checkbox
-      content = content.replace(/^\[x\]/i, '<input type="checkbox" checked disabled>');
-      content = content.replace(/^\[ \]/, '<input type="checkbox" disabled>');
-      out.push(`<li>${inlineFormat(content)}</li>`);
-      continue;
-    }
-
-    // Close list if no longer in list items
-    if (inList && !/^[-*]\s+/.test(line)) {
-      out.push("</ul>");
-      inList = false;
-    }
-
-    // Blank line
-    if (line.trim() === "") {
-      continue;
-    }
-
-    // Paragraph
-    out.push(`<p>${inlineFormat(line)}</p>`);
-  }
-
-  if (inList) out.push("</ul>");
-  if (inTable) out.push("</table>");
-
-  // Restore code blocks
-  let html = out.join("\n");
-  for (let i = 0; i < codeBlocks.length; i++) {
-    html = html.replace(`%%CODEBLOCK_${i}%%`, codeBlocks[i]);
-  }
-
-  return html;
-}
-
-function inlineFormat(text: string): string {
-  // Bold-italic (***text***)
-  text = text.replace(/\*\*\*(.+?)\*\*\*/g, "<strong><em>$1</em></strong>");
-  // Bold (**text**)
-  text = text.replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>");
-  // Italic (*text*)
-  text = text.replace(/\*(.+?)\*/g, "<em>$1</em>");
-  // Inline code (`text`)
-  text = text.replace(/`([^`]+)`/g, "<code>$1</code>");
-  return text;
+  return marked.parse(md, { async: false }) as string;
 }
 
 // --- Review discovery ---
