@@ -10,6 +10,8 @@ export interface PullRequest {
   author: string;
 }
 
+export type ReviewVerdict = "PASS" | "PASS (conditional)" | "FAIL" | "unknown";
+
 export interface ActionResult {
   action: string;
   success: boolean;
@@ -40,6 +42,7 @@ export interface HeimdallConfig {
   triage: TriageConfig;
   worker: WorkerConfig;
   costs: CostConfig;
+  server: { port: number };
 }
 
 export interface GitHubSourceConfig {

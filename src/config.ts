@@ -38,6 +38,7 @@ export const DEFAULT_CONFIG: HeimdallConfig = {
     "claude-opus-4-6": { inputPer1k: 0.015, outputPer1k: 0.075 },
     "claude-sonnet-4-6": { inputPer1k: 0.003, outputPer1k: 0.015 },
   },
+  server: { port: 7878 },
 };
 
 export function resolveHomePath(p: string): string {
