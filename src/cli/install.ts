@@ -34,7 +34,7 @@ function buildEnvDict(): string {
   return entries.join("\n");
 }
 
-function generatePlist(programArgs: string[], logPath: string, interval: number): string {
+function generatePlist(programArgs: string[], logPath: string): string {
   return `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
   "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -46,8 +46,8 @@ function generatePlist(programArgs: string[], logPath: string, interval: number)
   <array>
 ${programArgs.map(a => `    <string>${a}</string>`).join("\n")}
   </array>
-  <key>StartInterval</key>
-  <integer>${interval}</integer>
+  <key>KeepAlive</key>
+  <true/>
   <key>StandardOutPath</key>
   <string>${logPath}</string>
   <key>StandardErrorPath</key>
@@ -76,13 +76,13 @@ export async function install(): Promise<void> {
     programArgs = [process.execPath, entryPoint, "run"];
   }
 
-  const plistContent = generatePlist(programArgs, logPath, config.interval);
+  const plistContent = generatePlist(programArgs, logPath);
   await Bun.write(PLIST_PATH, plistContent);
   console.log(`Plist written to ${PLIST_PATH}`);
 
   const proc = Bun.spawnSync(["launchctl", "load", PLIST_PATH]);
   if (proc.exitCode === 0) {
-    console.log(`Heimdall installed and loaded. Polling every ${config.interval}s.`);
+    console.log(`Heimdall installed and loaded. Persistent mode with web server.`);
   } else {
     console.error("Failed to load plist:", new TextDecoder().decode(proc.stderr));
   }
