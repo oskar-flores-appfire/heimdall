@@ -1,4 +1,4 @@
-import type { Action, PullRequest, RepoConfig, ActionResult, JiraIssue, TriageReport } from "../types";
+import type { Action, PullRequest, RepoConfig, ActionResult, JiraIssue, TriageReport, ReviewVerdict } from "../types";
 import type { Logger } from "../logger";
 
 type Notifier = "terminal-notifier" | "osascript" | "none";
@@ -47,10 +47,17 @@ export class NotifyAction implements Action {
     }
   }
 
-  async notifyComplete(pr: PullRequest, _reportPath: string): Promise<ActionResult> {
-    const message = `Review ready: PR #${pr.number} — ${pr.title}`;
+  async notifyComplete(
+    pr: PullRequest,
+    _reportPath: string,
+    verdict: ReviewVerdict,
+    reviewUrl: string
+  ): Promise<ActionResult> {
+    const icon = verdict === "PASS" ? "✓" : verdict === "PASS (conditional)" ? "⚠" : "✗";
+    const title = `Heimdall ${icon}`;
+    const message = `PR #${pr.number}: ${verdict} — ${pr.title}`;
     try {
-      await this.send("Heimdall ✓", pr.repo, message, pr.url, `heimdall-${pr.repo}-${pr.number}`);
+      await this.sendReviewComplete(title, pr.repo, message, reviewUrl, pr.url, `heimdall-${pr.repo}-${pr.number}`);
       this.logger.info(`Review complete notification: ${message}`);
       return { action: "notify", success: true, message };
     } catch (err) {
@@ -222,6 +229,34 @@ export class NotifyAction implements Action {
         "-message", message,
         "-execute", wrapperScript,
         "-actions", "Approve",
+        "-sound", this.sound,
+        "-group", group,
+      ]);
+      await proc.exited;
+    } else if (this.notifier === "osascript") {
+      const script = `display notification "${message}" with title "${title}" subtitle "${subtitle}" sound name "${this.sound}"`;
+      const proc = Bun.spawn(["osascript", "-e", script]);
+      await proc.exited;
+    }
+  }
+
+  private async sendReviewComplete(
+    title: string,
+    subtitle: string,
+    message: string,
+    reviewUrl: string,
+    prUrl: string,
+    group: string
+  ): Promise<void> {
+    if (this.notifier === "terminal-notifier") {
+      const proc = Bun.spawn([
+        "terminal-notifier",
+        "-title", title,
+        "-subtitle", subtitle,
+        "-message", message,
+        "-open", reviewUrl,
+        "-actions", "Open PR",
+        "-execute", `open ${prUrl}`,
         "-sound", this.sound,
         "-group", group,
       ]);
