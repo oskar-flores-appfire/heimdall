@@ -1,6 +1,6 @@
 # Heimdall
 
-The All-Seeing PR Guardian. Watches for GitHub PR review requests, sends macOS notifications, and automatically dispatches Claude Code reviews.
+The All-Seeing PR Guardian. Watches for GitHub PR review requests and Jira issues, sends macOS notifications, automatically dispatches Claude Code reviews, and autonomously implements Jira tickets.
 
 ## Prerequisites
 
@@ -42,13 +42,19 @@ heimdall uninstall  # remove the daemon completely
 
 | Command | Description |
 |---|---|
-| `heimdall run` | Execute a single poll cycle |
+| `heimdall run` | Execute a single poll cycle (GitHub + Jira) |
 | `heimdall install` | Generate and load launchd plist |
 | `heimdall uninstall` | Remove launchd plist |
+| `heimdall reinstall` | Stop, rebuild, and reload daemon |
 | `heimdall start` | Start the daemon |
 | `heimdall stop` | Stop the daemon |
 | `heimdall status` | Show running state + recent reviews |
 | `heimdall logs` | Tail the log file |
+| `heimdall triage <KEY>` | View triage report for a Jira issue and approve |
+| `heimdall approve <KEY>` | Queue a Jira issue for autonomous implementation |
+| `heimdall worker` | Start the worker (picks up queued items) |
+| `heimdall queue` | List queue items with status |
+| `heimdall clean` | Remove completed/old worktrees |
 
 ## Configuration
 
@@ -62,6 +68,16 @@ Config lives at `~/.heimdall/config.json`:
       "type": "github",
       "repos": ["appfire-team/signal-iq"],  // add more repos here
       "trigger": "review-requested"
+    },
+    {
+      "type": "jira",
+      "baseUrl": "https://your-domain.atlassian.net",
+      "email": "you@example.com",
+      "apiToken": "file:~/.heimdall/secrets/jira-api-token",  // see "Jira Setup" below
+      "jql": "project = PROJ AND status != Done",
+      "projects": {
+        "PROJ": { "repo": "owner/repo", "cwd": "/path/to/local/checkout" }
+      }
     }
   ],
   "actions": {
@@ -82,14 +98,58 @@ Config lives at `~/.heimdall/config.json`:
         }
       }
     }
+  },
+  "triage": {
+    "threshold": 6,                   // minimum triage score to auto-approve
+    "maxSize": "L",                   // max issue size (S/M/L/XL)
+    "model": "sonnet",
+    "timeoutMinutes": 120
+  },
+  "worker": {
+    "maxParallel": 1,
+    "model": "opus",
+    "worktreeDir": "~/.heimdall/worktrees",
+    "maxTurns": 100,
+    "claudeArgs": ["--permission-mode", "auto", "--output-format", "stream-json"]
   }
 }
 ```
 
-### Adding a new repo
+### Adding a new GitHub repo
 
 1. Add the repo to `sources[0].repos`
 2. Add a review config entry under `actions.review.repos`
+
+### Jira Setup
+
+1. Generate an API token at https://id.atlassian.com/manage-profile/security/api-tokens
+2. Store the token in a file:
+   ```bash
+   mkdir -p ~/.heimdall/secrets
+   echo "your-token-here" > ~/.heimdall/secrets/jira-api-token
+   chmod 600 ~/.heimdall/secrets/jira-api-token
+   ```
+3. Add a Jira source to `sources` in `~/.heimdall/config.json` (see example above), referencing the file:
+   ```json
+   "apiToken": "file:~/.heimdall/secrets/jira-api-token"
+   ```
+4. Map each Jira project key to a local repo via the `projects` field
+
+The `apiToken` field supports three formats:
+- `"file:~/.heimdall/secrets/jira-api-token"` — reads from a file (recommended, works under launchd)
+- `"env:JIRA_API_TOKEN"` — reads from an environment variable
+- `"your-token-here"` — inline (not recommended)
+
+### Jira Autonomous Implementation
+
+Heimdall can autonomously implement Jira tickets using Claude Code:
+
+1. **`heimdall run`** — polls Jira and triages new issues (scores them for clarity, scope, and detail)
+2. **`heimdall triage <KEY>`** — view the triage report and optionally approve the issue
+3. **`heimdall approve <KEY>`** — queue the issue for implementation
+4. **`heimdall worker`** — starts a worker that picks up queued issues, creates a git worktree, and runs Claude Code to implement them
+5. **`heimdall queue`** — check the status of queued items
+6. **`heimdall clean`** — remove completed worktrees
 
 ### Prompt placeholders
 
@@ -115,11 +175,19 @@ With `terminal-notifier`, these replace each other (same group per PR). Without 
 ├── config.json                     # your settings
 ├── seen.json                       # tracked PRs (auto-managed)
 ├── heimdall.log                    # activity log
-└── reviews/
-    └── appfire-team/
-        └── signal-iq/
-            ├── PR-42.md            # review reports
-            └── PR-53.md
+├── secrets/                        # API tokens (chmod 600)
+│   └── jira-api-token
+├── reviews/
+│   └── appfire-team/
+│       └── signal-iq/
+│           ├── PR-42.md            # review reports
+│           └── PR-53.md
+├── triage/                         # Jira triage reports
+│   └── PROJ-123.json
+├── queue/                          # implementation queue items
+│   └── PROJ-123.json
+├── worktrees/                      # git worktrees for implementation
+└── runs/                           # implementation run logs
 ```
 
 ## Build
@@ -140,14 +208,13 @@ bun run src/index.ts run  # test a poll cycle
 
 Plugin-based with two extension points:
 
-- **Sources** — where events come from (`GitHubSource` polls `gh pr list`)
-- **Actions** — what to do (`NotifyAction`, `ReviewAction`)
+- **Sources** — where events come from (`GitHubSource` polls `gh pr list`, `JiraSource` polls Jira REST API)
+- **Actions** — what to do (`NotifyAction`, `ReviewAction`, `TriageAction`)
+
+The Jira autonomous pipeline adds:
+
+- **Triage** — Claude scores issues for readiness (acceptance clarity, scope, technical detail)
+- **Queue** — approved issues are queued for implementation
+- **Worker** — picks up queue items, creates git worktrees, and runs Claude Code to implement
 
 Zero npm dependencies. Built entirely on Bun built-ins.
-
-### Future
-
-- Slack source/notifications
-- PR comment posting
-- Claude Channels integration (when it exits research preview)
-- Auto-fix based on review findings

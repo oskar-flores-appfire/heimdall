@@ -270,9 +270,12 @@ export class Worker {
       ["git", "worktree", "add", worktreePath, "-b", branch],
       { cwd: repoCwd, stdout: "pipe", stderr: "pipe" }
     );
-    const exitCode = await proc.exited;
+    const [exitCode, , stderr] = await Promise.all([
+      proc.exited,
+      new Response(proc.stdout).text(),
+      new Response(proc.stderr).text(),
+    ]);
     if (exitCode !== 0) {
-      const stderr = await new Response(proc.stderr).text();
       throw new Error(`git worktree add failed: ${stderr}`);
     }
   }
@@ -316,9 +319,11 @@ export class Worker {
       env: { ...process.env, TERM: "dumb" },
     });
 
-    const exitCode = await proc.exited;
-    const stdout = await new Response(proc.stdout).text();
-    const stderr = await new Response(proc.stderr).text();
+    const [exitCode, stdout, stderr] = await Promise.all([
+      proc.exited,
+      new Response(proc.stdout).text(),
+      new Response(proc.stderr).text(),
+    ]);
 
     return { stdout, stderr, exitCode };
   }
@@ -328,17 +333,23 @@ export class Worker {
       ["git", "diff", "--name-only", "main...HEAD"],
       { cwd: worktreePath, stdout: "pipe", stderr: "pipe" }
     );
-    const exitCode = await proc.exited;
+    const [exitCode, stdout] = await Promise.all([
+      proc.exited,
+      new Response(proc.stdout).text(),
+      new Response(proc.stderr).text(),
+    ]);
     if (exitCode !== 0) {
       const fallback = Bun.spawn(
         ["git", "diff", "--name-only", "--cached"],
         { cwd: worktreePath, stdout: "pipe", stderr: "pipe" }
       );
-      await fallback.exited;
-      const out = await new Response(fallback.stdout).text();
-      return out.trim().split("\n").filter(Boolean).length;
+      const [, fallbackOut] = await Promise.all([
+        fallback.exited,
+        new Response(fallback.stdout).text(),
+        new Response(fallback.stderr).text(),
+      ]);
+      return fallbackOut.trim().split("\n").filter(Boolean).length;
     }
-    const stdout = await new Response(proc.stdout).text();
     return stdout.trim().split("\n").filter(Boolean).length;
   }
 
@@ -348,9 +359,12 @@ export class Worker {
       ["git", "push", "-u", "origin", branch],
       { cwd: worktreePath, stdout: "pipe", stderr: "pipe" }
     );
-    const exitCode = await proc.exited;
+    const [exitCode, , stderr] = await Promise.all([
+      proc.exited,
+      new Response(proc.stdout).text(),
+      new Response(proc.stderr).text(),
+    ]);
     if (exitCode !== 0) {
-      const stderr = await new Response(proc.stderr).text();
       throw new Error(`git push failed: ${stderr}`);
     }
   }
@@ -361,10 +375,12 @@ export class Worker {
       ["gh", "pr", "create", "--draft", "--title", title, "--body", body, "--head", branch],
       { cwd: repoCwd, stdout: "pipe", stderr: "pipe" }
     );
-    const exitCode = await proc.exited;
-    const stdout = await new Response(proc.stdout).text();
+    const [exitCode, stdout, stderr] = await Promise.all([
+      proc.exited,
+      new Response(proc.stdout).text(),
+      new Response(proc.stderr).text(),
+    ]);
     if (exitCode !== 0) {
-      const stderr = await new Response(proc.stderr).text();
       throw new Error(`gh pr create failed: ${stderr}`);
     }
     return stdout.trim();

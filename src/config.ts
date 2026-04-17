@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync } from "fs";
+import { existsSync, mkdirSync, readFileSync } from "fs";
 import { homedir } from "os";
 import type { HeimdallConfig } from "./types";
 
@@ -50,6 +50,11 @@ export function resolveSecret(value: string): string {
     const val = process.env[envVar];
     if (!val) throw new Error(`Environment variable ${envVar} is not set`);
     return val;
+  }
+  if (value.startsWith("file:")) {
+    const filePath = resolveHomePath(value.slice(5));
+    if (!existsSync(filePath)) throw new Error(`Secret file not found: ${filePath}`);
+    return readFileSync(filePath, "utf-8").trim();
   }
   return value;
 }

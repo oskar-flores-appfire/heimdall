@@ -46,14 +46,15 @@ export class GitHubSource implements Source {
       { stdout: "pipe", stderr: "pipe" }
     );
 
-    const exitCode = await proc.exited;
+    const [exitCode, stdout, stderr] = await Promise.all([
+      proc.exited,
+      new Response(proc.stdout).text(),
+      new Response(proc.stderr).text(),
+    ]);
     if (exitCode !== 0) {
-      const stderr = await new Response(proc.stderr).text();
       this.logger.error(`gh pr list failed for ${repo}: ${stderr}`);
       return [];
     }
-
-    const stdout = await new Response(proc.stdout).text();
     if (!stdout.trim()) return [];
 
     const raw: GhPrJson[] = JSON.parse(stdout);
