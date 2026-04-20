@@ -151,9 +151,10 @@ export function buildDecisionTrace(
     return lines.join("\n");
   }
 
+  const conf = confidence ?? "unknown";
   lines.push(`- Gate 2 (Feasibility): PASS — no blockers`);
-  lines.push(`- Gate 3 (Confidence): ${confidence!.toUpperCase()} — ${result.confidence_reasoning ?? ""}`);
-  lines.push(`→ Verdict: READY | Confidence: ${confidence!.toUpperCase()}`);
+  lines.push(`- Gate 3 (Confidence): ${conf.toUpperCase()} — ${result.confidence_reasoning ?? ""}`);
+  lines.push(`→ Verdict: READY | Confidence: ${conf.toUpperCase()}`);
   return lines.join("\n");
 }
 
@@ -186,7 +187,8 @@ export function buildMermaidDiagram(
     lines.push(`    style G3 fill:#999`);
   } else {
     lines.push(`    G1["Gate 1: Specification<br/>PASS ${result.total}/${result.max}, ${result.size}"] -->|PASS| G2["Gate 2: Feasibility<br/>PASS"]`);
-    lines.push(`    G2 -->|PASS| G3["Gate 3: Confidence<br/>${confidence!.toUpperCase()}"]`);
+    const conf = confidence ?? "unknown";
+    lines.push(`    G2 -->|PASS| G3["Gate 3: Confidence<br/>${conf.toUpperCase()}"]`);
     lines.push(`    G3 --> V["READY"]`);
     lines.push(`    style G1 fill:#6f6`);
     lines.push(`    style G2 fill:#6f6`);

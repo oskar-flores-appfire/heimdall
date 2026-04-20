@@ -29,18 +29,21 @@ export async function triage(): Promise<void> {
   });
   await proc.exited;
 
-  // Check verdict from JSON report
-  if (existsSync(jsonPath)) {
-    const report: TriageReport = await Bun.file(jsonPath).json();
+  // Check verdict from JSON report — require it for approval gating
+  if (!existsSync(jsonPath)) {
+    console.log(`\nNo JSON report found — cannot determine verdict. Skipping approval.`);
+    process.exit(0);
+  }
 
-    if (report.verdict !== "ready") {
-      console.log(`\nVerdict: ${report.verdict.toUpperCase()} — not eligible for approval.`);
-      process.exit(0);
-    }
+  const report: TriageReport = await Bun.file(jsonPath).json();
 
-    if (report.confidence === "low") {
-      console.log(`\nVerdict: READY but confidence is LOW — review recommended before approval.`);
-    }
+  if (report.verdict !== "ready") {
+    console.log(`\nVerdict: ${report.verdict.toUpperCase()} — not eligible for approval.`);
+    process.exit(0);
+  }
+
+  if (report.confidence === "low") {
+    console.log(`\nVerdict: READY but confidence is LOW — review recommended before approval.`);
   }
 
   process.stdout.write(`\nApprove ${issueKey} for Heimdall? [y/n]: `);
