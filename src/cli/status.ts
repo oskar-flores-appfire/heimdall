@@ -27,11 +27,10 @@ export async function status(): Promise<void> {
 
   const logFile = resolveHomePath("~/.heimdall/heimdall.log");
   if (existsSync(logFile)) {
-    const content = await Bun.file(logFile).text();
-    const lines = content.trim().split("\n");
-    const last5 = lines.slice(-5);
     console.log("\nRecent logs:");
-    for (const line of last5) {
+    const proc = Bun.spawnSync(["tail", "-n", "5", logFile]);
+    const output = new TextDecoder().decode(proc.stdout);
+    for (const line of output.trim().split("\n")) {
       console.log(`  ${line}`);
     }
   }
