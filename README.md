@@ -18,14 +18,15 @@ brew install terminal-notifier  # optional but recommended
 ```bash
 # Clone and run
 cd ~/code/stuff/heimdall
-bun run src/index.ts run        # single poll cycle
+bun run src/index.ts run --once  # single poll cycle
+bun run src/index.ts run         # persistent mode (server + polling loop)
 
 # Or build the binary first
 bun run build.ts
 ./dist/heimdall run
 ```
 
-On first run, Heimdall generates a config at `~/.heimdall/config.json` with `appfire-team/signal-iq` pre-configured. Edit it to add your repos.
+On first run, Heimdall generates a default config at `~/.heimdall/config.json`. Edit it to add your repos.
 
 ## Install as Daemon
 
@@ -42,14 +43,16 @@ heimdall uninstall  # remove the daemon completely
 
 | Command | Description |
 |---|---|
-| `heimdall run` | Execute a single poll cycle (GitHub + Jira) |
+| `heimdall run` | Start persistent mode (server + polling loop) |
+| `heimdall run --once` | Execute a single poll cycle and exit |
 | `heimdall install` | Generate and load launchd plist |
 | `heimdall uninstall` | Remove launchd plist |
-| `heimdall reinstall` | Stop, rebuild, and reload daemon |
+| `heimdall reinstall` | Stop and reload the daemon |
 | `heimdall start` | Start the daemon |
 | `heimdall stop` | Stop the daemon |
 | `heimdall status` | Show running state + recent reviews |
 | `heimdall logs` | Tail the log file |
+| `heimdall open <number>` | Open a review in browser (detects repo from cwd) |
 | `heimdall triage <KEY>` | View triage report for a Jira issue and approve |
 | `heimdall approve <KEY>` | Queue a Jira issue for autonomous implementation |
 | `heimdall worker` | Start the worker (picks up queued items) |
@@ -66,7 +69,7 @@ Config lives at `~/.heimdall/config.json`:
   "sources": [
     {
       "type": "github",
-      "repos": ["appfire-team/signal-iq"],  // add more repos here
+      "repos": ["owner/repo"],  // add your repos here
       "trigger": "review-requested"
     },
     {
@@ -92,8 +95,8 @@ Config lives at `~/.heimdall/config.json`:
       "command": "claude",
       "defaultArgs": ["-p", "--permission-mode", "auto", "--output-format", "text"],
       "repos": {
-        "appfire-team/signal-iq": {
-          "prompt": "Review PR #{{pr_number}} against DDD/Clean Architecture rules...",
+        "owner/repo": {
+          "prompt": "Review PR #{{pr_number}}...",
           "cwd": "/path/to/local/checkout"
         }
       }
@@ -178,8 +181,8 @@ With `terminal-notifier`, these replace each other (same group per PR). Without 
 ├── secrets/                        # API tokens (chmod 600)
 │   └── jira-api-token
 ├── reviews/
-│   └── appfire-team/
-│       └── signal-iq/
+│   └── owner/
+│       └── repo/
 │           ├── PR-42.md            # review reports
 │           └── PR-53.md
 ├── triage/                         # Jira triage reports
