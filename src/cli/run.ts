@@ -101,6 +101,16 @@ export async function run(): Promise<void> {
 
   // Persistent mode: start server + poll loop
   logger.info("Heimdall starting — persistent mode");
+
+  // Check if port is already in use (e.g. daemon already running)
+  try {
+    const probe = Bun.serve({ port: config.server.port, fetch() { return new Response(); } });
+    probe.stop();
+  } catch {
+    console.error(`Port ${config.server.port} already in use. Is the daemon running? (heimdall status)`);
+    process.exit(1);
+  }
+
   startServer(config, logger);
 
   // Run first cycle immediately
