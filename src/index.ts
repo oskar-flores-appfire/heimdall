@@ -73,6 +73,9 @@ switch (command) {
     await open();
     break;
   }
+  case "help":
+  case "--help":
+  case "-h":
   default:
     console.log(`
 Heimdall — The All-Seeing PR Guardian
@@ -80,14 +83,16 @@ Heimdall — The All-Seeing PR Guardian
 Usage: heimdall <command>
 
 Commands:
-  run              Execute a single poll cycle (GitHub + Jira)
+  run              Start persistent mode (server + polling loop)
+  run --once       Execute a single poll cycle and exit
   start            Start the daemon (launchd)
   stop             Stop the daemon
   status           Show running state and recent reviews
   logs             Tail the log file
   install          Generate and load launchd plist
-  reinstall        Stop, rebuild, and reload daemon
+  reinstall        Stop and reload the daemon
   uninstall        Remove launchd plist
+  open <number>    Open a review in browser (detects repo from cwd)
 
 Jira Autonomous Implementation:
   triage <KEY>     View triage report and approve
@@ -95,7 +100,6 @@ Jira Autonomous Implementation:
   worker           Start worker (picks up queue items)
   queue            List queue items with status
   clean            Remove completed/old worktrees
-  open <number>    Open a review in browser (detects repo from cwd)
     `);
     break;
 }
