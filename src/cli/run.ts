@@ -46,6 +46,8 @@ async function executeCycle(
             await notifyAction.notifyTriage(issue, report);
           } else if (report.verdict === "needs_detail") {
             await notifyAction.notifyNeedsDetail(issue, report);
+          } else if (report.verdict === "not_feasible") {
+            await notifyAction.notifyNotFeasible(issue, report);
           } else {
             await notifyAction.notifyTooBig(issue, report);
           }
