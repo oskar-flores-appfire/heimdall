@@ -131,6 +131,7 @@ export class TriageAction {
       issue,
       result,
       verdict,
+      confidence: verdict === "ready" ? result.confidence : null,
       timestamp: new Date().toISOString(),
     };
 

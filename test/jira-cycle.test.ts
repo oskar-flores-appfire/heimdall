@@ -36,8 +36,17 @@ const readyReport: TriageReport = {
     verdict: "Well-defined",
     concerns: "None",
     suggested_files: [],
+    feasibility: {
+      unmockable_dependencies: false,
+      human_dependency: false,
+      ambiguity_overload: false,
+      reasoning: "All deps mockable, no human gates, scope is clear",
+    },
+    confidence: "high",
+    confidence_reasoning: "Straightforward implementation with clear boundaries",
   },
   verdict: "ready",
+  confidence: "high",
   timestamp: new Date().toISOString(),
 };
 

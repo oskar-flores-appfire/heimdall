@@ -74,8 +74,17 @@ const testTriageReport: TriageReport = {
     verdict: "Well-defined",
     concerns: "None",
     suggested_files: ["src/auth.ts"],
+    feasibility: {
+      unmockable_dependencies: false,
+      human_dependency: false,
+      ambiguity_overload: false,
+      reasoning: "All mockable",
+    },
+    confidence: "high",
+    confidence_reasoning: "Clear scope",
   },
   verdict: "ready",
+  confidence: "high",
   timestamp: "2026-04-15T10:00:00Z",
 };
 

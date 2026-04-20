@@ -32,6 +32,14 @@ const validResult = {
   verdict: "Well-defined. Touches auth middleware and its tests.",
   concerns: "No error handling scenarios specified.",
   suggested_files: ["src/auth/middleware.ts"],
+  feasibility: {
+    unmockable_dependencies: false,
+    human_dependency: false,
+    ambiguity_overload: false,
+    reasoning: "All deps mockable, no human gates, clear scope",
+  },
+  confidence: "high" as const,
+  confidence_reasoning: "Straightforward refactor with clear boundaries",
 };
 
 describe("buildTriagePrompt", () => {
