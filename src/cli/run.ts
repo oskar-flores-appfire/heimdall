@@ -62,29 +62,7 @@ export async function run(): Promise<void> {
   await ensureHeimdallDir();
 
   if (!existsSync(DEFAULT_CONFIG_PATH)) {
-    const defaultWithRepo = {
-      ...DEFAULT_CONFIG,
-      sources: [
-        {
-          type: "github" as const,
-          repos: ["appfire-team/signal-iq"],
-          trigger: "review-requested" as const,
-        },
-      ],
-      actions: {
-        ...DEFAULT_CONFIG.actions,
-        review: {
-          ...DEFAULT_CONFIG.actions.review,
-          repos: {
-            "appfire-team/signal-iq": {
-              prompt: "Review PR #{{pr_number}} in appfire-team/signal-iq against the project's DDD/Clean Architecture rules. Run automated scans. Report findings grouped by severity: FLAGRANT, VIOLATION, SUGGESTION.",
-              cwd: "/Users/oskarflores/code/innovation/signal-iq",
-            },
-          },
-        },
-      },
-    };
-    await Bun.write(DEFAULT_CONFIG_PATH, JSON.stringify(defaultWithRepo, null, 2));
+    await Bun.write(DEFAULT_CONFIG_PATH, JSON.stringify(DEFAULT_CONFIG, null, 2));
     console.log(`Config created at ${DEFAULT_CONFIG_PATH} — edit repos and paths.`);
   }
 
