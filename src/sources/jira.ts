@@ -26,7 +26,7 @@ export class JiraSource {
     const auth = btoa(`${this.config.email}:${token}`);
     const jql = encodeURIComponent(this.config.jql);
     const fields = "summary,description,status,assignee,issuetype,project";
-    const url = `${this.config.baseUrl}/rest/api/3/search?jql=${jql}&fields=${fields}`;
+    const url = `${this.config.baseUrl}/rest/api/3/search/jql?jql=${jql}&fields=${fields}`;
 
     this.logger.info(`Polling Jira: ${this.config.baseUrl}`);
 
