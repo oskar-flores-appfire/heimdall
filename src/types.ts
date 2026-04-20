@@ -122,14 +122,23 @@ export interface TriageResult {
   verdict: string;
   concerns: string;
   suggested_files: string[];
+  feasibility: {
+    unmockable_dependencies: boolean;
+    human_dependency: boolean;
+    ambiguity_overload: boolean;
+    reasoning: string;
+  } | null;
+  confidence: "high" | "medium" | "low" | null;
+  confidence_reasoning: string | null;
 }
 
-export type TriageVerdict = "ready" | "needs_detail" | "too_big";
+export type TriageVerdict = "ready" | "needs_detail" | "too_big" | "not_feasible";
 
 export interface TriageReport {
   issue: JiraIssue;
   result: TriageResult;
   verdict: TriageVerdict;
+  confidence: "high" | "medium" | "low" | null;
   timestamp: string;
 }
 

@@ -4,7 +4,7 @@ import {
   parseTriageResult,
   evaluateVerdict,
 } from "../../src/actions/triage";
-import type { JiraIssue, TriageConfig } from "../../src/types";
+import type { JiraIssue, TriageConfig, TriageResult, TriageReport, TriageVerdict } from "../../src/types";
 
 const testIssue: JiraIssue = {
   key: "PROJ-123",
@@ -91,5 +91,61 @@ describe("evaluateVerdict", () => {
   it("returns too_big when size exceeds maxSize", () => {
     const config = { ...triageConfig, maxSize: "S" as const };
     expect(evaluateVerdict(validResult, config)).toBe("too_big");
+  });
+});
+
+describe("type contracts", () => {
+  it("TriageResult includes feasibility and confidence fields", () => {
+    const result: TriageResult = {
+      criteria: { acceptance_clarity: 2, scope_boundedness: 3, technical_detail: 2 },
+      total: 7,
+      max: 9,
+      size: "M",
+      verdict: "Well-defined",
+      concerns: "None",
+      suggested_files: ["src/auth.ts"],
+      feasibility: {
+        unmockable_dependencies: false,
+        human_dependency: false,
+        ambiguity_overload: false,
+        reasoning: "All deps mockable, no human gates, scope is clear",
+      },
+      confidence: "high",
+      confidence_reasoning: "Straightforward CRUD, familiar patterns",
+    };
+    expect(result.feasibility!.unmockable_dependencies).toBe(false);
+    expect(result.confidence).toBe("high");
+  });
+
+  it("TriageVerdict includes not_feasible", () => {
+    const v: TriageVerdict = "not_feasible";
+    expect(v).toBe("not_feasible");
+  });
+
+  it("TriageReport includes confidence", () => {
+    const report: TriageReport = {
+      issue: testIssue,
+      result: {
+        criteria: { acceptance_clarity: 2, scope_boundedness: 3, technical_detail: 2 },
+        total: 7,
+        max: 9,
+        size: "M",
+        verdict: "Well-defined",
+        concerns: "None",
+        suggested_files: ["src/auth.ts"],
+        feasibility: {
+          unmockable_dependencies: false,
+          human_dependency: false,
+          ambiguity_overload: false,
+          reasoning: "All mockable",
+        },
+        confidence: "high",
+        confidence_reasoning: "Clear scope",
+      },
+      verdict: "ready",
+      confidence: "high",
+      timestamp: "2026-04-20T10:00:00Z",
+    };
+    expect(report.confidence).toBe("high");
   });
 });
