@@ -9,7 +9,10 @@
   "scripts": {
     "dev": "bun run src/index.ts",
     "test": "bun test",
-    "build": "bun run build.ts"
+    "build": "bun run scripts/build.ts",
+    "build:sign": "bun run scripts/build.ts --sign",
+    "verify": "bun run scripts/verify.ts",
+    "notarize:status": "bun run scripts/notarize-status.ts"
   },
   "dependencies": {
     "marked": "^18.0.1"
