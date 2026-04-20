@@ -24,7 +24,7 @@ Status: ${issue.status}
 ## Description
 ${issue.description}
 
-## Scoring Rubric
+## Gate 1: Scoring Rubric
 Rate each criterion 0-3:
 
 1. **acceptance_clarity** (0-3): Are acceptance criteria explicit and testable?
@@ -51,6 +51,24 @@ Rate each criterion 0-3:
 - L: 200-500 lines, 5-10 files
 - XL: > 500 lines or > 10 files
 
+## Gate 2: Agent Feasibility
+Evaluate whether an AI coding agent can tackle this issue autonomously:
+
+- **unmockable_dependencies** (true/false): Does this require real external systems that cannot be mocked or simulated? (production databases, hardware, third-party APIs without sandbox)
+- **human_dependency** (true/false): Does this require design decisions, stakeholder sign-off, or cross-team coordination before coding can begin?
+- **ambiguity_overload** (true/false): Would the agent need to ask 3+ clarifying questions before it could start?
+
+If the total score is below 6 or size is XL, set feasibility to null.
+
+## Gate 3: Confidence Assessment
+If all feasibility signals are false, rate confidence that an AI agent can produce a mergeable PR on the first try:
+
+- "high": Straightforward implementation, clear patterns, no unknowns
+- "medium": Implementable but likely needs one round of human review on approach
+- "low": Significant unknowns that would slow the agent down
+
+If feasibility is null or any signal is true, set confidence and confidence_reasoning to null.
+
 ## Output
 Respond with ONLY valid JSON (no markdown wrapping):
 {
@@ -64,7 +82,15 @@ Respond with ONLY valid JSON (no markdown wrapping):
   "size": "<S|M|L|XL>",
   "verdict": "<one sentence assessment>",
   "concerns": "<what is missing or concerning>",
-  "suggested_files": ["<files likely to need changes>"]
+  "suggested_files": ["<files likely to need changes>"],
+  "feasibility": {
+    "unmockable_dependencies": <true|false>,
+    "human_dependency": <true|false>,
+    "ambiguity_overload": <true|false>,
+    "reasoning": "<one sentence per signal>"
+  } | null,
+  "confidence": "<high|medium|low>" | null,
+  "confidence_reasoning": "<one sentence justification>" | null
 }`;
 }
 
@@ -83,6 +109,14 @@ export function evaluateVerdict(
   const maxIdx = SIZE_ORDER.indexOf(config.maxSize);
   if (sizeIdx > maxIdx || result.size === "XL") return "too_big";
   if (result.total < config.threshold) return "needs_detail";
+  if (
+    result.feasibility &&
+    (result.feasibility.unmockable_dependencies ||
+      result.feasibility.human_dependency ||
+      result.feasibility.ambiguity_overload)
+  ) {
+    return "not_feasible";
+  }
   return "ready";
 }
 

@@ -60,6 +60,29 @@ describe("buildTriagePrompt", () => {
     expect(prompt).toContain("scope_boundedness");
     expect(prompt).toContain("technical_detail");
   });
+
+  it("includes agent feasibility section", () => {
+    const prompt = buildTriagePrompt(testIssue);
+    expect(prompt).toContain("Agent Feasibility");
+    expect(prompt).toContain("unmockable_dependencies");
+    expect(prompt).toContain("human_dependency");
+    expect(prompt).toContain("ambiguity_overload");
+  });
+
+  it("includes confidence assessment section", () => {
+    const prompt = buildTriagePrompt(testIssue);
+    expect(prompt).toContain("Confidence Assessment");
+    expect(prompt).toContain('"high"');
+    expect(prompt).toContain('"medium"');
+    expect(prompt).toContain('"low"');
+  });
+
+  it("includes feasibility and confidence in JSON output schema", () => {
+    const prompt = buildTriagePrompt(testIssue);
+    expect(prompt).toContain('"feasibility"');
+    expect(prompt).toContain('"confidence"');
+    expect(prompt).toContain('"confidence_reasoning"');
+  });
 });
 
 describe("parseTriageResult", () => {
@@ -99,6 +122,78 @@ describe("evaluateVerdict", () => {
   it("returns too_big when size exceeds maxSize", () => {
     const config = { ...triageConfig, maxSize: "S" as const };
     expect(evaluateVerdict(validResult, config)).toBe("too_big");
+  });
+
+  it("returns not_feasible when unmockable_dependencies is true", () => {
+    const infeasible = {
+      ...validResult,
+      feasibility: {
+        ...validResult.feasibility,
+        unmockable_dependencies: true,
+        reasoning: "Requires production Stripe API",
+      },
+    };
+    expect(evaluateVerdict(infeasible, triageConfig)).toBe("not_feasible");
+  });
+
+  it("returns not_feasible when human_dependency is true", () => {
+    const infeasible = {
+      ...validResult,
+      feasibility: {
+        ...validResult.feasibility,
+        human_dependency: true,
+        reasoning: "Needs design review before implementation",
+      },
+    };
+    expect(evaluateVerdict(infeasible, triageConfig)).toBe("not_feasible");
+  });
+
+  it("returns not_feasible when ambiguity_overload is true", () => {
+    const infeasible = {
+      ...validResult,
+      feasibility: {
+        ...validResult.feasibility,
+        ambiguity_overload: true,
+        reasoning: "Too many open questions about auth flow",
+      },
+    };
+    expect(evaluateVerdict(infeasible, triageConfig)).toBe("not_feasible");
+  });
+
+  it("too_big takes priority over not_feasible", () => {
+    const both = {
+      ...validResult,
+      size: "XL" as const,
+      feasibility: {
+        ...validResult.feasibility,
+        unmockable_dependencies: true,
+        reasoning: "Requires prod API",
+      },
+    };
+    expect(evaluateVerdict(both, triageConfig)).toBe("too_big");
+  });
+
+  it("needs_detail takes priority over not_feasible", () => {
+    const both = {
+      ...validResult,
+      total: 3,
+      feasibility: {
+        ...validResult.feasibility,
+        human_dependency: true,
+        reasoning: "Needs stakeholder input",
+      },
+    };
+    expect(evaluateVerdict(both, triageConfig)).toBe("needs_detail");
+  });
+
+  it("returns ready when feasibility is null", () => {
+    const nullFeasibility = {
+      ...validResult,
+      feasibility: null,
+      confidence: null,
+      confidence_reasoning: null,
+    };
+    expect(evaluateVerdict(nullFeasibility, triageConfig)).toBe("ready");
   });
 });
 
