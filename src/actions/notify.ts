@@ -90,16 +90,27 @@ export class NotifyAction implements Action {
   async notifyTriage(issue: JiraIssue, report: TriageReport): Promise<ActionResult> {
     const score = `${report.result.total}/${report.result.max}`;
     const files = report.result.suggested_files.length;
-    const message = `Score: ${score} (${report.result.total >= 7 ? "High" : "Medium"}) | Size: ${report.result.size} | ${files} file(s)\nReady for implementation`;
+    const conf = report.confidence ? report.confidence : "unknown";
+    const message = `Score: ${score} | Size: ${report.result.size} | Confidence: ${conf} | ${files} file(s)`;
     try {
-      await this.sendTriage(
-        `Heimdall — ${issue.key}`,
-        issue.title,
-        message,
-        `heimdall triage ${issue.key}`,
-        `heimdall approve ${issue.key}`,
-        `heimdall-triage-${issue.key}`
-      );
+      if (report.confidence === "low") {
+        await this.send(
+          `Heimdall — ${issue.key}`,
+          issue.title,
+          `${message}\nLow confidence — review recommended`,
+          issue.url,
+          `heimdall-triage-${issue.key}`
+        );
+      } else {
+        await this.sendTriage(
+          `Heimdall — ${issue.key}`,
+          issue.title,
+          message,
+          `heimdall triage ${issue.key}`,
+          `heimdall approve ${issue.key}`,
+          `heimdall-triage-${issue.key}`
+        );
+      }
       this.logger.info(`Triage notification sent: ${issue.key}`);
       return { action: "notify", success: true, message };
     } catch (err) {
@@ -141,6 +152,25 @@ export class NotifyAction implements Action {
       return { action: "notify", success: true, message };
     } catch (err) {
       this.logger.error(`Too-big notification failed: ${err}`);
+      return { action: "notify", success: false, message: String(err) };
+    }
+  }
+
+  async notifyNotFeasible(issue: JiraIssue, report: TriageReport): Promise<ActionResult> {
+    const reasoning = report.result.feasibility?.reasoning ?? "Agent cannot tackle this autonomously";
+    const message = `Not feasible — ${reasoning}`;
+    try {
+      await this.send(
+        `Heimdall — ${issue.key}`,
+        issue.title,
+        message,
+        issue.url,
+        `heimdall-triage-${issue.key}`
+      );
+      this.logger.info(`Not-feasible notification: ${issue.key}`);
+      return { action: "notify", success: true, message };
+    } catch (err) {
+      this.logger.error(`Not-feasible notification failed: ${err}`);
       return { action: "notify", success: false, message: String(err) };
     }
   }

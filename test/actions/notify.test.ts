@@ -110,6 +110,29 @@ describe("NotifyAction triage notifications", () => {
     expect(result.action).toBe("notify");
   });
 
+  it("notifyNotFeasible returns success", async () => {
+    const notify = new NotifyAction("Glass", logger);
+    const notFeasible: TriageReport = {
+      ...testTriageReport,
+      verdict: "not_feasible",
+      confidence: null,
+      result: {
+        ...testTriageReport.result,
+        feasibility: {
+          unmockable_dependencies: true,
+          human_dependency: false,
+          ambiguity_overload: false,
+          reasoning: "Requires production Stripe API",
+        },
+        confidence: null,
+        confidence_reasoning: null,
+      },
+    };
+    const result = await notify.notifyNotFeasible(testIssue, notFeasible);
+    expect(result.action).toBe("notify");
+    expect(result.success).toBe(true);
+  });
+
   it("notifyWorkerComplete returns success", async () => {
     const notify = new NotifyAction("Glass", logger);
     const result = await notify.notifyWorkerComplete("PROJ-123", "https://github.com/org/repo/pull/1", 7, "$0.47", "8m 34s");
