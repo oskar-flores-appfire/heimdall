@@ -120,6 +120,84 @@ export function evaluateVerdict(
   return "ready";
 }
 
+export function buildDecisionTrace(
+  result: TriageResult,
+  verdict: TriageVerdict,
+  confidence: "high" | "medium" | "low" | null
+): string {
+  const lines: string[] = [];
+
+  if (verdict === "too_big") {
+    lines.push(`- Gate 1 (Specification): FAIL — size ${result.size} exceeds limit`);
+    lines.push(`→ Verdict: TOO_BIG`);
+    return lines.join("\n");
+  }
+
+  if (verdict === "needs_detail") {
+    lines.push(`- Gate 1 (Specification): FAIL — score ${result.total}/${result.max}, below threshold`);
+    lines.push(`→ Verdict: NEEDS_DETAIL`);
+    return lines.join("\n");
+  }
+
+  lines.push(`- Gate 1 (Specification): PASS — score ${result.total}/${result.max}, size ${result.size}`);
+
+  if (verdict === "not_feasible") {
+    const reasons: string[] = [];
+    if (result.feasibility?.unmockable_dependencies) reasons.push("unmockable dependencies");
+    if (result.feasibility?.human_dependency) reasons.push("human dependency");
+    if (result.feasibility?.ambiguity_overload) reasons.push("ambiguity overload");
+    lines.push(`- Gate 2 (Feasibility): FAIL — ${reasons.join(", ")}`);
+    lines.push(`→ Verdict: NOT_FEASIBLE`);
+    return lines.join("\n");
+  }
+
+  lines.push(`- Gate 2 (Feasibility): PASS — no blockers`);
+  lines.push(`- Gate 3 (Confidence): ${confidence!.toUpperCase()} — ${result.confidence_reasoning ?? ""}`);
+  lines.push(`→ Verdict: READY | Confidence: ${confidence!.toUpperCase()}`);
+  return lines.join("\n");
+}
+
+export function buildMermaidDiagram(
+  result: TriageResult,
+  verdict: TriageVerdict,
+  confidence: "high" | "medium" | "low" | null
+): string {
+  const lines: string[] = ["```mermaid", "graph TD"];
+
+  if (verdict === "too_big") {
+    lines.push(`    G1["Gate 1: Specification<br/>FAIL size ${result.size}"] --> V["TOO BIG"]`);
+    lines.push(`    style G1 fill:#f66`);
+    lines.push(`    style V fill:#f66`);
+  } else if (verdict === "needs_detail") {
+    lines.push(`    G1["Gate 1: Specification<br/>FAIL ${result.total}/${result.max}"] --> V["NEEDS DETAIL"]`);
+    lines.push(`    style G1 fill:#f66`);
+    lines.push(`    style V fill:#f66`);
+  } else if (verdict === "not_feasible") {
+    const reasons: string[] = [];
+    if (result.feasibility?.unmockable_dependencies) reasons.push("unmockable deps");
+    if (result.feasibility?.human_dependency) reasons.push("human dep");
+    if (result.feasibility?.ambiguity_overload) reasons.push("ambiguity");
+    lines.push(`    G1["Gate 1: Specification<br/>PASS ${result.total}/${result.max}, ${result.size}"] -->|PASS| G2["Gate 2: Feasibility<br/>FAIL: ${reasons.join(", ")}"]`);
+    lines.push(`    G2 --> V["NOT FEASIBLE"]`);
+    lines.push(`    G3["Gate 3: Confidence<br/>SKIPPED"]`);
+    lines.push(`    style G1 fill:#6f6`);
+    lines.push(`    style G2 fill:#f66`);
+    lines.push(`    style V fill:#f66`);
+    lines.push(`    style G3 fill:#999`);
+  } else {
+    lines.push(`    G1["Gate 1: Specification<br/>PASS ${result.total}/${result.max}, ${result.size}"] -->|PASS| G2["Gate 2: Feasibility<br/>PASS"]`);
+    lines.push(`    G2 -->|PASS| G3["Gate 3: Confidence<br/>${confidence!.toUpperCase()}"]`);
+    lines.push(`    G3 --> V["READY"]`);
+    lines.push(`    style G1 fill:#6f6`);
+    lines.push(`    style G2 fill:#6f6`);
+    lines.push(`    style G3 fill:#6f6`);
+    lines.push(`    style V fill:#6f6`);
+  }
+
+  lines.push("```");
+  return lines.join("\n");
+}
+
 export class TriageAction {
   constructor(
     private readonly config: TriageConfig,

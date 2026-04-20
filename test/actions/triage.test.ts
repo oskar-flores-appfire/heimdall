@@ -3,6 +3,8 @@ import {
   buildTriagePrompt,
   parseTriageResult,
   evaluateVerdict,
+  buildDecisionTrace,
+  buildMermaidDiagram,
 } from "../../src/actions/triage";
 import type { JiraIssue, TriageConfig, TriageResult, TriageReport, TriageVerdict } from "../../src/types";
 
@@ -194,6 +196,84 @@ describe("evaluateVerdict", () => {
       confidence_reasoning: null,
     };
     expect(evaluateVerdict(nullFeasibility, triageConfig)).toBe("ready");
+  });
+});
+
+describe("buildDecisionTrace", () => {
+  it("shows all gates passing for ready verdict", () => {
+    const trace = buildDecisionTrace(validResult, "ready", "high");
+    expect(trace).toContain("Gate 1 (Specification): PASS");
+    expect(trace).toContain("score 6/9, size M");
+    expect(trace).toContain("Gate 2 (Feasibility): PASS");
+    expect(trace).toContain("Gate 3 (Confidence): HIGH");
+    expect(trace).toContain("Verdict: READY | Confidence: HIGH");
+  });
+
+  it("stops at gate 1 for needs_detail", () => {
+    const lowScore = { ...validResult, total: 3 };
+    const trace = buildDecisionTrace(lowScore, "needs_detail", null);
+    expect(trace).toContain("Gate 1 (Specification): FAIL");
+    expect(trace).toContain("Verdict: NEEDS_DETAIL");
+    expect(trace).not.toContain("Gate 2");
+    expect(trace).not.toContain("Gate 3");
+  });
+
+  it("stops at gate 1 for too_big", () => {
+    const xl = { ...validResult, size: "XL" as const };
+    const trace = buildDecisionTrace(xl, "too_big", null);
+    expect(trace).toContain("Gate 1 (Specification): FAIL");
+    expect(trace).toContain("Verdict: TOO_BIG");
+  });
+
+  it("stops at gate 2 for not_feasible", () => {
+    const infeasible = {
+      ...validResult,
+      feasibility: {
+        unmockable_dependencies: true,
+        human_dependency: false,
+        ambiguity_overload: false,
+        reasoning: "Requires production Stripe API",
+      },
+    };
+    const trace = buildDecisionTrace(infeasible, "not_feasible", null);
+    expect(trace).toContain("Gate 1 (Specification): PASS");
+    expect(trace).toContain("Gate 2 (Feasibility): FAIL");
+    expect(trace).toContain("unmockable dependencies");
+    expect(trace).toContain("Verdict: NOT_FEASIBLE");
+    expect(trace).not.toContain("Gate 3");
+  });
+});
+
+describe("buildMermaidDiagram", () => {
+  it("generates all-green diagram for ready verdict", () => {
+    const diagram = buildMermaidDiagram(validResult, "ready", "high");
+    expect(diagram).toContain("graph TD");
+    expect(diagram).toContain("PASS");
+    expect(diagram).toContain("READY");
+    expect(diagram).toContain("fill:#6f6");
+  });
+
+  it("generates red stop at gate 2 for not_feasible", () => {
+    const infeasible = {
+      ...validResult,
+      feasibility: {
+        unmockable_dependencies: true,
+        human_dependency: false,
+        ambiguity_overload: false,
+        reasoning: "Requires prod Stripe API",
+      },
+    };
+    const diagram = buildMermaidDiagram(infeasible, "not_feasible", null);
+    expect(diagram).toContain("fill:#f66");
+    expect(diagram).toContain("NOT FEASIBLE");
+    expect(diagram).toContain("fill:#999");
+  });
+
+  it("generates red stop at gate 1 for needs_detail", () => {
+    const low = { ...validResult, total: 3 };
+    const diagram = buildMermaidDiagram(low, "needs_detail", null);
+    expect(diagram).toContain("NEEDS DETAIL");
+    expect(diagram).toContain("fill:#f66");
   });
 });
 
