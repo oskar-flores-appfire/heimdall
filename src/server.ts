@@ -319,7 +319,9 @@ ${rows}
 
 async function renderTriageDetail(
   triageDir: string,
-  issueKey: string
+  issueKey: string,
+  queueDir: string,
+  error?: string | null
 ): Promise<string | null> {
   const mdPath = join(triageDir, `${issueKey}.md`);
   if (!existsSync(mdPath)) return null;
@@ -329,10 +331,12 @@ async function renderTriageDetail(
   const jsonPath = join(triageDir, `${issueKey}.json`);
   let verdict: TriageVerdict = "not_feasible";
   let jiraUrl = "";
+  let confidence = "";
   if (existsSync(jsonPath)) {
     const report = await Bun.file(jsonPath).json();
     verdict = report.verdict;
     jiraUrl = report.issue?.url || "";
+    confidence = report.confidence ?? "";
   }
 
   const html = markdownToHtml(content);
@@ -343,7 +347,38 @@ async function renderTriageDetail(
   ${jiraUrl ? `<a href="${jiraUrl}" target="_blank">Open in Jira &rarr;</a>` : ""}
 </div>`;
 
-  return pageShell(`Triage — ${issueKey}`, header + html, "triage");
+  const errorBanner = error
+    ? `<div class="error-banner">${escapeHtml(
+        error === "no-report" ? "No triage report found."
+          : error === "not-ready" ? "Verdict is not ready — cannot approve."
+          : error === "no-config" ? "No project config found. Check config.json."
+          : error
+      )}</div>`
+    : "";
+
+  // Check queue status
+  const queuePath = join(queueDir, `${issueKey}.json`);
+  let queueStatus: string | null = null;
+  let prUrl: string | null = null;
+  if (existsSync(queuePath)) {
+    const queueItem = await Bun.file(queuePath).json();
+    queueStatus = queueItem.status;
+    prUrl = queueItem.prUrl || null;
+  }
+
+  let stickyBar = "";
+  if (queueStatus) {
+    const statusText = queueStatus === "completed" && prUrl
+      ? `Completed &mdash; <a href="${prUrl}" target="_blank">Open PR &rarr;</a>`
+      : queueStatus === "in_progress"
+        ? "In progress&hellip;"
+        : `Queued (${queueStatus})`;
+    stickyBar = `<div class="sticky-bar"><span>${triageVerdictBadge(verdict)} ${confidence ? `&middot; ${confidence} confidence` : ""}</span><span>${statusText}</span></div><div class="sticky-bar-spacer"></div>`;
+  } else if (verdict === "ready") {
+    stickyBar = `<div class="sticky-bar"><span>${triageVerdictBadge(verdict)} ${confidence ? `&middot; ${confidence} confidence` : ""}</span><form method="POST" action="/triage/${issueKey}/approve"><button type="submit" class="btn btn-primary">Approve</button></form></div><div class="sticky-bar-spacer"></div>`;
+  }
+
+  return pageShell(`Triage — ${issueKey}`, header + errorBanner + html + stickyBar, "triage");
 }
 
 // --- Route matching ---
@@ -411,10 +446,29 @@ export function startServer(config: HeimdallConfig, logger: Logger, opts?: { con
         });
       }
 
+      // POST /triage/:key/approve
+      const approveMatch = pathname.match(/^\/triage\/([A-Z]+-\d+)\/approve$/);
+      if (approveMatch && req.method === "POST") {
+        const key = approveMatch[1];
+        const { approveIssue } = await import("./approve");
+        const result = await approveIssue(key, { heimdallDir, configPath: opts?.configPath });
+        if (!result.ok) {
+          return new Response(null, {
+            status: 303,
+            headers: { Location: `/triage/${key}?error=${result.error}` },
+          });
+        }
+        return new Response(null, {
+          status: 303,
+          headers: { Location: "/queue" },
+        });
+      }
+
       // GET /triage/:issueKey -> triage detail
       const triageKey = matchTriageRoute(pathname);
       if (triageKey) {
-        const html = await renderTriageDetail(triageDir, triageKey);
+        const error = url.searchParams.get("error");
+        const html = await renderTriageDetail(triageDir, triageKey, queueDir, error);
         if (!html) {
           return new Response("Not Found", { status: 404 });
         }
