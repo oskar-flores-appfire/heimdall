@@ -362,6 +362,89 @@ export class Worker {
     }
   }
 
+  private async gatherBranchContext(
+    cwd: string
+  ): Promise<{ claudeMd: string | null; agentsMd: string | null; branches: string[] }> {
+    // Read convention docs
+    const claudeMdPath = join(cwd, "CLAUDE.md");
+    const agentsMdPath = join(cwd, "AGENTS.md");
+    const claudeMd = existsSync(claudeMdPath) ? await Bun.file(claudeMdPath).text() : null;
+    const agentsMd = existsSync(agentsMdPath) ? await Bun.file(agentsMdPath).text() : null;
+
+    // List remote branches (cap at 50)
+    const proc = Bun.spawn(["git", "branch", "-r"], {
+      cwd,
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+    const [exitCode, stdout] = await Promise.all([
+      proc.exited,
+      new Response(proc.stdout).text(),
+      new Response(proc.stderr).text(),
+    ]);
+
+    let branches: string[] = [];
+    if (exitCode === 0) {
+      branches = stdout
+        .trim()
+        .split("\n")
+        .map((b) => b.trim())
+        .filter((b) => b && !b.includes("->"))
+        .slice(-50);
+    }
+
+    return { claudeMd, agentsMd, branches };
+  }
+
+  private async resolveBranchName(item: QueueItem): Promise<string> {
+    const fallback = `heimdall/${item.issueKey}`;
+
+    try {
+      this.logger.info(`Resolving branch name for ${item.issueKey}`);
+      const context = await this.gatherBranchContext(item.cwd);
+
+      const prompt = buildBranchResolutionPrompt({
+        issueKey: item.issueKey,
+        title: item.title,
+        issueType: item.issueType,
+        claudeMd: context.claudeMd,
+        agentsMd: context.agentsMd,
+        branches: context.branches,
+      });
+
+      const triageModel = this.config.triage.model;
+      const proc = Bun.spawn(
+        ["claude", "-p", prompt, "--model", triageModel, "--output-format", "text"],
+        { cwd: item.cwd, stdout: "pipe", stderr: "pipe" }
+      );
+
+      const timeout = setTimeout(() => proc.kill(), 30_000);
+      const [exitCode, stdout] = await Promise.all([
+        proc.exited,
+        new Response(proc.stdout).text(),
+        new Response(proc.stderr).text(),
+      ]);
+      clearTimeout(timeout);
+
+      if (exitCode !== 0) {
+        this.logger.warn(`Branch resolution failed (exit ${exitCode}), using fallback: ${fallback}`);
+        return fallback;
+      }
+
+      const resolved = parseBranchName(stdout);
+      if (!resolved) {
+        this.logger.warn(`Branch resolution returned invalid name, using fallback: ${fallback}`);
+        return fallback;
+      }
+
+      this.logger.info(`Resolved branch name: ${resolved}`);
+      return resolved;
+    } catch (err) {
+      this.logger.warn(`Branch resolution error: ${err}, using fallback: ${fallback}`);
+      return fallback;
+    }
+  }
+
   private async spawnClaude(
     prompt: string,
     cwd: string,
