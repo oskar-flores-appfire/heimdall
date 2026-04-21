@@ -34,7 +34,22 @@ function verdictBadge(verdict: ReviewVerdict): string {
 
 // --- Page shell ---
 
-function pageShell(title: string, body: string): string {
+function pageShell(title: string, body: string, activePage?: string): string {
+  const navItems = [
+    { label: "Dashboard", href: "/" },
+    { label: "Reviews", href: "/reviews" },
+    { label: "Triage", href: "/triage" },
+    { label: "Queue", href: "/queue" },
+  ];
+  const nav = navItems
+    .map((item) => {
+      const isActive = item.label.toLowerCase() === activePage?.toLowerCase();
+      return isActive
+        ? `<a href="${item.href}" style="color:#58a6ff;font-weight:700;">${item.label}</a>`
+        : `<a href="${item.href}" style="color:#8b949e;">${item.label}</a>`;
+    })
+    .join('<span style="color:#30363d;margin:0 8px;">|</span>');
+
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -46,8 +61,8 @@ function pageShell(title: string, body: string): string {
   body {
     margin: 0; padding: 2rem;
     background: #0d1117; color: #e6edf3;
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
-    line-height: 1.6;
+    font-family: "SF Mono", "Fira Code", "Cascadia Code", monospace;
+    line-height: 1.6; font-size: 14px;
   }
   a { color: #58a6ff; text-decoration: none; }
   a:hover { text-decoration: underline; }
@@ -66,10 +81,23 @@ function pageShell(title: string, body: string): string {
   ul { padding-left: 1.5em; }
   li { margin: 0.25em 0; }
   input[type="checkbox"] { margin-right: 0.5em; }
+  nav { border-bottom: 1px solid #30363d; padding-bottom: 12px; margin-bottom: 1.5em; font-size: 14px; }
+  .error-banner { background: #3d1418; border: 1px solid #f85149; color: #f85149; padding: 8px 12px; border-radius: 6px; margin-bottom: 1em; }
+  .btn { display: inline-block; padding: 4px 14px; border-radius: 4px; border: none; font-family: inherit; font-size: 13px; cursor: pointer; font-weight: 600; text-decoration: none; }
+  .btn-primary { background: #22c55e; color: #fff; }
+  .btn-primary:hover { background: #16a34a; text-decoration: none; }
+  .sticky-bar { position: fixed; bottom: 0; left: 0; right: 0; background: #161b22; border-top: 1px solid #30363d; padding: 10px 2rem; display: flex; justify-content: space-between; align-items: center; z-index: 100; }
+  .sticky-bar-spacer { height: 60px; }
+  .status-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; }
+  .status-active { background: #22c55e; }
+  .status-idle { background: #6b7280; }
+  .status-dead { background: #ef4444; }
+  .badge { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 0.8em; font-weight: 600; color: #fff; }
 </style>
 </head>
 <body>
 <article>
+<nav>${nav}</nav>
 ${body}
 </article>
 </body>
@@ -131,7 +159,7 @@ async function discoverReviews(reportsDir: string): Promise<ReviewEntry[]> {
 
 function renderListing(entries: ReviewEntry[]): string {
   if (entries.length === 0) {
-    return pageShell("Reviews", "<h1>Heimdall Reviews</h1><p>No reviews found.</p>");
+    return pageShell("Reviews", "<h1>Heimdall Reviews</h1><p>No reviews found.</p>", "reviews");
   }
 
   // Group by owner/repo
@@ -162,7 +190,7 @@ function renderListing(entries: ReviewEntry[]): string {
 ${rows}
 </table>`;
 
-  return pageShell("Reviews", body);
+  return pageShell("Reviews", body, "reviews");
 }
 
 function escapeHtml(s: string): string {
@@ -194,7 +222,7 @@ async function renderReview(
   ${prUrl ? `<a href="${prUrl}" target="_blank">Open PR on GitHub &rarr;</a>` : ""}
 </div>`;
 
-  return pageShell(`PR-${number} — ${owner}/${repo}`, header + html);
+  return pageShell(`PR-${number} — ${owner}/${repo}`, header + html, "reviews");
 }
 
 // --- Triage types ---
@@ -262,7 +290,7 @@ async function discoverTriageReports(triageDir: string): Promise<TriageEntry[]> 
 
 function renderTriageListing(entries: TriageEntry[]): string {
   if (entries.length === 0) {
-    return pageShell("Triage", "<h1>Heimdall Triage Reports</h1><p>No triage reports found.</p>");
+    return pageShell("Triage", "<h1>Heimdall Triage Reports</h1><p>No triage reports found.</p>", "triage");
   }
 
   let rows = "";
@@ -284,7 +312,7 @@ function renderTriageListing(entries: TriageEntry[]): string {
 ${rows}
 </table>`;
 
-  return pageShell("Triage", body);
+  return pageShell("Triage", body, "triage");
 }
 
 // --- Single triage detail page ---
@@ -315,7 +343,7 @@ async function renderTriageDetail(
   ${jiraUrl ? `<a href="${jiraUrl}" target="_blank">Open in Jira &rarr;</a>` : ""}
 </div>`;
 
-  return pageShell(`Triage — ${issueKey}`, header + html);
+  return pageShell(`Triage — ${issueKey}`, header + html, "triage");
 }
 
 // --- Route matching ---
@@ -333,9 +361,11 @@ function matchTriageRoute(pathname: string): string | null {
 
 // --- Server ---
 
-export function startServer(config: HeimdallConfig, logger: Logger) {
+export function startServer(config: HeimdallConfig, logger: Logger, opts?: { configPath?: string; heimdallDir?: string }) {
   const reportsDir = resolveHomePath(config.reports.dir);
-  const triageDir = resolveHomePath(`${HEIMDALL_DIR}/triage`);
+  const heimdallDir = opts?.heimdallDir ?? resolveHomePath(HEIMDALL_DIR);
+  const triageDir = join(heimdallDir, "triage");
+  const queueDir = join(heimdallDir, "queue");
 
   const server = Bun.serve({
     port: config.server.port,
