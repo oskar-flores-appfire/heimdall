@@ -237,7 +237,7 @@ export class NotifyAction implements Action {
     subtitle: string,
     message: string,
     triageUrl: string,
-    approveCommand: string,
+    _approveCommand: string,
     group: string
   ): Promise<void> {
     if (this.notifier === "terminal-notifier") {
@@ -247,8 +247,6 @@ export class NotifyAction implements Action {
         "-subtitle", subtitle,
         "-message", message,
         "-open", triageUrl,
-        "-actions", "Approve",
-        "-execute", approveCommand,
         "-sound", this.sound,
         "-group", group,
       ]);
@@ -265,7 +263,7 @@ export class NotifyAction implements Action {
     subtitle: string,
     message: string,
     reviewUrl: string,
-    prUrl: string,
+    _prUrl: string,
     group: string
   ): Promise<void> {
     if (this.notifier === "terminal-notifier") {
@@ -275,8 +273,6 @@ export class NotifyAction implements Action {
         "-subtitle", subtitle,
         "-message", message,
         "-open", reviewUrl,
-        "-actions", "Open PR",
-        "-execute", `open ${prUrl}`,
         "-sound", this.sound,
         "-group", group,
       ]);
