@@ -462,6 +462,54 @@ ${activities.length > 0
   return pageShell("Dashboard", body, "dashboard");
 }
 
+// --- Queue page ---
+
+async function renderQueuePage(queueDir: string, heimdallDir: string): Promise<string> {
+  const worker = getWorkerStatus(heimdallDir);
+  const statusDotClass = worker.state === "active" ? "status-active" : worker.state === "idle" ? "status-idle" : "status-dead";
+  const statusLabel = worker.state === "active" ? "active" : worker.state === "idle" ? "idle" : "dead (stale heartbeat)";
+
+  const { QueueManager } = await import("./queue");
+  const queueManager = new QueueManager(queueDir);
+  const items = await queueManager.list();
+  const pendingCount = items.filter((i) => i.status === "pending").length;
+
+  const startButton = worker.state !== "active" && pendingCount > 0
+    ? `<form method="POST" action="/worker/start" style="display:inline;margin-left:8px;"><button type="submit" class="btn btn-primary">Start Worker</button></form>`
+    : "";
+
+  // Sort: in_progress first, then pending, then completed/failed by date
+  const sorted = [...items].sort((a, b) => {
+    const order: Record<string, number> = { in_progress: 0, pending: 1, completed: 2, failed: 3 };
+    const diff = (order[a.status] ?? 4) - (order[b.status] ?? 4);
+    if (diff !== 0) return diff;
+    return b.approvedAt.localeCompare(a.approvedAt);
+  });
+
+  let rows = "";
+  for (const item of sorted) {
+    const colors: Record<string, string> = { pending: "#6b7280", in_progress: "#eab308", completed: "#22c55e", failed: "#ef4444" };
+    const bg = colors[item.status] ?? "#6b7280";
+    const prLink = item.prUrl ? `<a href="${item.prUrl}" target="_blank">PR &rarr;</a>` : "";
+    rows += `<tr>
+  <td><a href="/triage/${item.issueKey}">${item.issueKey}</a></td>
+  <td>${escapeHtml(item.title)}</td>
+  <td><span class="badge" style="background:${bg}">${item.status}</span></td>
+  <td>${new Date(item.approvedAt).toLocaleDateString()}</td>
+  <td>${item.branch ?? ""}</td>
+  <td>${prLink}</td>
+</tr>\n`;
+  }
+
+  const body = `<h1>Queue</h1>
+<div style="margin-bottom:1.5em;"><span class="status-dot ${statusDotClass}"></span>Worker: ${statusLabel} ${startButton}</div>
+${items.length > 0
+    ? `<table><tr><th>Issue</th><th>Title</th><th>Status</th><th>Approved</th><th>Branch</th><th>PR</th></tr>${rows}</table>`
+    : `<p style="color:#8b949e;">Queue is empty.</p>`}`;
+
+  return pageShell("Queue", body, "queue");
+}
+
 // --- Route matching ---
 
 function matchRoute(pathname: string): { owner: string; repo: string; number: number } | null {
@@ -555,6 +603,30 @@ export function startServer(config: HeimdallConfig, logger: Logger, opts?: { con
         }
         return new Response(html, {
           headers: { "Content-Type": "text/html; charset=utf-8" },
+        });
+      }
+
+      // GET /queue
+      if (pathname === "/queue") {
+        const html = await renderQueuePage(queueDir, heimdallDir);
+        return new Response(html, {
+          headers: { "Content-Type": "text/html; charset=utf-8" },
+        });
+      }
+
+      // POST /worker/start
+      if (pathname === "/worker/start" && req.method === "POST") {
+        const workerStatus = getWorkerStatus(heimdallDir);
+        if (workerStatus.state !== "active") {
+          Bun.spawn(["bun", "run", join(import.meta.dir, "index.ts"), "worker"], {
+            stdout: "ignore",
+            stderr: "ignore",
+          });
+          logger.info("Worker started from web UI");
+        }
+        return new Response(null, {
+          status: 303,
+          headers: { Location: "/queue" },
         });
       }
 

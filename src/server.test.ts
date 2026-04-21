@@ -81,3 +81,20 @@ test("POST /triage/MISSING-1/approve returns redirect with error", async () => {
   expect(res.status).toBe(303);
   expect(res.headers.get("Location")).toContain("error=no-report");
 });
+
+test("GET /queue returns HTML with queue table", async () => {
+  const res = await fetch(`http://localhost:${TEST_PORT}/queue`);
+  expect(res.status).toBe(200);
+  const html = await res.text();
+  expect(html).toContain("Queue");
+  expect(res.headers.get("Content-Type")).toContain("text/html");
+});
+
+test("POST /worker/start redirects to /queue", async () => {
+  const res = await fetch(`http://localhost:${TEST_PORT}/worker/start`, {
+    method: "POST",
+    redirect: "manual",
+  });
+  expect(res.status).toBe(303);
+  expect(res.headers.get("Location")).toBe("/queue");
+});
