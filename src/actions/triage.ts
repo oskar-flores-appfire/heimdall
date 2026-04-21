@@ -226,7 +226,7 @@ export class TriageAction {
 
     const startTime = Date.now();
     const proc = Bun.spawn(
-      ["claude", "-p", prompt, "--output-format", "json", "--model", this.config.model],
+      ["claude", "-p", prompt, "--output-format", "json", "--model", this.config.model, "--permission-mode", "auto"],
       { stdout: "pipe", stderr: "pipe", env: { ...process.env, TERM: "dumb" } }
     );
 

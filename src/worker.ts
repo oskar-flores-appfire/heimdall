@@ -426,12 +426,12 @@ export class Worker {
 
       const triageModel = this.config.triage.model;
       const proc = Bun.spawn(
-        ["claude", "-p", prompt, "--model", triageModel, "--output-format", "text"],
+        ["claude", "-p", prompt, "--model", triageModel, "--output-format", "text", "--permission-mode", "auto"],
         { cwd: item.cwd, stdout: "pipe", stderr: "pipe" }
       );
 
       const timeout = setTimeout(() => proc.kill(), 30_000);
-      const [exitCode, stdout] = await Promise.all([
+      const [exitCode, stdout, stderr] = await Promise.all([
         proc.exited,
         new Response(proc.stdout).text(),
         new Response(proc.stderr).text(),
@@ -439,6 +439,7 @@ export class Worker {
       clearTimeout(timeout);
 
       if (exitCode !== 0) {
+        if (stderr) this.logger.warn(`Branch resolution stderr: ${stderr.trim()}`);
         this.logger.warn(`Branch resolution failed (exit ${exitCode}), using fallback: ${fallback}`);
         return fallback;
       }
