@@ -264,6 +264,10 @@ export class Worker {
       const claudeResult = await this.spawnClaude(prompt, worktreePath, item);
       const implSeconds = (Date.now() - implStart) / 1000;
 
+      if (claudeResult.exitCode !== 0 && claudeResult.stderr) {
+        this.logger.error(`Claude stderr for ${item.issueKey}: ${claudeResult.stderr.trim()}`);
+      }
+
       const streamResult = parseStreamJson(claudeResult.stdout);
       const model = `claude-${this.config.worker.model}-4-6`;
       const cost = calculateCost(
@@ -313,7 +317,7 @@ export class Worker {
       const prUrl = await this.createDraftPr(item.cwd, branch, prTitle, prBody);
       summary.prUrl = prUrl;
 
-      await this.saveRunArtifacts(item.issueKey, summary, triageContent, claudeResult.stdout);
+      await this.saveRunArtifacts(item.issueKey, summary, triageContent, claudeResult.stdout, claudeResult.stderr);
 
       await this.queue.update(item.issueKey, {
         status: isComplete ? "completed" : "failed",
@@ -563,13 +567,17 @@ export class Worker {
     issueKey: string,
     summary: ImplementationSummary,
     triageContent: string,
-    implementationLog: string
+    implementationLog: string,
+    stderr?: string
   ): Promise<void> {
     const runsDir = join(resolveHomePath(HEIMDALL_DIR), "runs", issueKey);
     mkdirSync(runsDir, { recursive: true });
     await Bun.write(join(runsDir, "summary.json"), JSON.stringify(summary, null, 2));
     await Bun.write(join(runsDir, "triage.md"), triageContent);
     await Bun.write(join(runsDir, "implementation.log"), implementationLog);
+    if (stderr) {
+      await Bun.write(join(runsDir, "stderr.log"), stderr);
+    }
   }
 
   private async removeWorktree(repoCwd: string, worktreePath: string): Promise<void> {
