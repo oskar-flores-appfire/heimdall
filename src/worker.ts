@@ -91,6 +91,42 @@ ${worktreePath}
 Follow the workflow defined in your system prompt. Start at Gate 1.`;
 }
 
+export interface BranchResolutionInput {
+  issueKey: string;
+  title: string;
+  issueType?: string;
+  claudeMd: string | null;
+  agentsMd: string | null;
+  branches: string[];
+}
+
+export function buildBranchResolutionPrompt(input: BranchResolutionInput): string {
+  const docsSection = [
+    input.claudeMd ?? "No CLAUDE.md found.",
+    input.agentsMd ?? "No AGENTS.md found.",
+  ].join("\n\n");
+
+  const branchSection =
+    input.branches.length > 0
+      ? input.branches.join("\n")
+      : "No remote branches found.";
+
+  return `You are deciding the git branch name for a new issue.
+
+## Issue
+Key: ${input.issueKey}
+Title: ${input.title}
+Type: ${input.issueType || "unknown"}
+
+## Repository conventions
+${docsSection}
+
+## Existing branches
+${branchSection}
+
+Based on the repository's documented conventions and existing branch naming patterns, reply with ONLY the branch name. Nothing else.`;
+}
+
 // --- PR body builder ---
 
 export function buildPrBody(
