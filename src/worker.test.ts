@@ -61,6 +61,22 @@ test("parseBranchName returns null for names with invalid chars", () => {
   expect(parseBranchName("feature/PROJ:42")).toBeNull();
 });
 
+test("parseBranchName rejects .lock suffix", () => {
+  expect(parseBranchName("feature/foo.lock")).toBeNull();
+});
+
+test("parseBranchName rejects @{ sequence", () => {
+  expect(parseBranchName("feature/@{foo")).toBeNull();
+});
+
+test("parseBranchName rejects consecutive slashes", () => {
+  expect(parseBranchName("feature//foo")).toBeNull();
+});
+
+test("parseBranchName rejects control characters", () => {
+  expect(parseBranchName("feature/\x01foo")).toBeNull();
+});
+
 test("parseBranchName allows slashes and dashes", () => {
   expect(parseBranchName("bugfix/PROJ-42-fix-crash")).toBe(
     "bugfix/PROJ-42-fix-crash"

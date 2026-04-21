@@ -143,6 +143,10 @@ export function parseBranchName(raw: string): string | null {
   if (/[\s~^:?*\[\]\\]/.test(line)) return null;
   if (line.includes("..")) return null;
   if (line.endsWith(".") || line.endsWith("/")) return null;
+  if (line.endsWith(".lock")) return null;
+  if (line.includes("@{")) return null;
+  if (line.includes("//")) return null;
+  if (/[\x00-\x1f\x7f]/.test(line)) return null;
   if (line.startsWith("-")) return null;
 
   return line;
