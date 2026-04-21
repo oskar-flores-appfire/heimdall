@@ -6,6 +6,7 @@ import type { HeimdallConfig, ReviewVerdict, TriageVerdict } from "./types";
 import type { Logger } from "./logger";
 import { parseVerdict } from "./verdict";
 import { resolveHomePath, HEIMDALL_DIR } from "./config";
+import { getWorkerStatus } from "./heartbeat";
 
 // --- Types ---
 
@@ -381,6 +382,86 @@ async function renderTriageDetail(
   return pageShell(`Triage — ${issueKey}`, header + errorBanner + html + stickyBar, "triage");
 }
 
+// --- Dashboard page ---
+
+async function renderDashboard(
+  triageDir: string,
+  reportsDir: string,
+  queueDir: string,
+  heimdallDir: string
+): Promise<string> {
+  // Worker status
+  const worker = getWorkerStatus(heimdallDir);
+  const statusDotClass = worker.state === "active" ? "status-active" : worker.state === "idle" ? "status-idle" : "status-dead";
+  const statusLabel = worker.state === "active" ? "active" : worker.state === "idle" ? "idle" : "dead (stale heartbeat)";
+
+  // Find in-progress item for label
+  const { QueueManager } = await import("./queue");
+  const queueManager = new QueueManager(queueDir);
+  const queueItems = await queueManager.list();
+  const inProgress = queueItems.find((i) => i.status === "in_progress");
+  const pendingCount = queueItems.filter((i) => i.status === "pending").length;
+
+  let workerText = `<span class="status-dot ${statusDotClass}"></span>Worker: ${statusLabel}`;
+  if (worker.state === "active" && inProgress) {
+    const elapsed = Math.floor((Date.now() - new Date(inProgress.approvedAt).getTime()) / 60_000);
+    workerText = `<span class="status-dot status-active"></span>Worker: <a href="/triage/${inProgress.issueKey}">${inProgress.issueKey}</a> (${elapsed}m)`;
+  }
+
+  // Queue summary
+  const activeItems = queueItems.filter((i) => i.status === "pending" || i.status === "in_progress");
+  let queueRows = "";
+  for (const item of activeItems.slice(0, 5)) {
+    const statusColor = item.status === "in_progress" ? "#eab308" : "#8b949e";
+    queueRows += `<tr><td><a href="/triage/${item.issueKey}">${item.issueKey}</a></td><td>${escapeHtml(item.title.length > 50 ? item.title.slice(0, 50) + "…" : item.title)}</td><td><span class="badge" style="background:${statusColor}">${item.status}</span></td><td>${new Date(item.approvedAt).toLocaleString()}</td></tr>\n`;
+  }
+
+  const startButton = worker.state !== "active" && pendingCount > 0
+    ? `<form method="POST" action="/worker/start" style="display:inline;margin-left:8px;"><button type="submit" class="btn btn-primary">Start Worker</button></form>`
+    : "";
+
+  // Recent activity (last 5 triage + reviews interleaved by date)
+  const triageEntries = await discoverTriageReports(triageDir);
+  const reviewEntries = await discoverReviews(reportsDir);
+
+  type ActivityItem = { date: string; html: string };
+  const activities: ActivityItem[] = [];
+
+  for (const t of triageEntries.slice(0, 5)) {
+    activities.push({
+      date: t.date,
+      html: `<a href="/triage/${t.key}">${t.key}</a> triaged &rarr; ${triageVerdictBadge(t.verdict)}`,
+    });
+  }
+  for (const r of reviewEntries.slice(0, 5)) {
+    activities.push({
+      date: r.date,
+      html: `<a href="/reviews/${r.owner}/${r.repo}/PR-${r.number}">PR #${r.number}</a> reviewed &rarr; ${verdictBadge(r.verdict)}`,
+    });
+  }
+  activities.sort((a, b) => (b.date > a.date ? 1 : b.date < a.date ? -1 : 0));
+
+  let activityRows = "";
+  for (const a of activities.slice(0, 5)) {
+    activityRows += `<tr><td>${a.html}</td><td style="color:#8b949e;">${a.date ? new Date(a.date).toLocaleDateString() : ""}</td></tr>\n`;
+  }
+
+  const body = `<h1>Heimdall</h1>
+<div style="margin-bottom:1.5em;">${workerText}</div>
+
+<div style="color:#8b949e;font-size:0.85em;margin-bottom:4px;">QUEUE ${startButton}</div>
+${activeItems.length > 0
+    ? `<table><tr><th>Issue</th><th>Title</th><th>Status</th><th>Approved</th></tr>${queueRows}</table>`
+    : `<p style="color:#8b949e;">No pending items.</p>`}
+
+<div style="color:#8b949e;font-size:0.85em;margin-bottom:4px;margin-top:1.5em;">Recent</div>
+${activities.length > 0
+    ? `<table><tr><th>Activity</th><th>Date</th></tr>${activityRows}</table>`
+    : `<p style="color:#8b949e;">No recent activity.</p>`}`;
+
+  return pageShell("Dashboard", body, "dashboard");
+}
+
 // --- Route matching ---
 
 function matchRoute(pathname: string): { owner: string; repo: string; number: number } | null {
@@ -408,11 +489,11 @@ export function startServer(config: HeimdallConfig, logger: Logger, opts?: { con
       const url = new URL(req.url);
       const { pathname } = url;
 
-      // GET / -> redirect to /reviews
+      // GET / -> dashboard
       if (pathname === "/") {
-        return new Response(null, {
-          status: 302,
-          headers: { Location: "/reviews" },
+        const html = await renderDashboard(triageDir, reportsDir, queueDir, heimdallDir);
+        return new Response(html, {
+          headers: { "Content-Type": "text/html; charset=utf-8" },
         });
       }
 

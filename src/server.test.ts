@@ -45,9 +45,14 @@ afterAll(() => {
   rmSync(TEST_HEIMDALL_DIR, { recursive: true, force: true });
 });
 
-test("GET / returns 200", async () => {
+test("GET / returns dashboard HTML", async () => {
   const res = await fetch(`http://localhost:${TEST_PORT}/`);
   expect(res.status).toBe(200);
+  const html = await res.text();
+  expect(html).toContain("Dashboard");
+  expect(html).toContain("Worker");
+  expect(html).toContain("Queue");
+  expect(html).toContain("Recent");
 });
 
 test("GET /reviews returns HTML", async () => {
