@@ -1,7 +1,71 @@
 ---
-description: Use Bun instead of Node.js, npm, pnpm, or vite.
+description: Heimdall — autonomous PR review watcher and Jira-to-PR implementation agent. Use Bun, not Node.js.
 globs: "*.ts, *.tsx, *.html, *.css, *.js, *.jsx, package.json"
-alwaysApply: false
+alwaysApply: true
+---
+
+## Project: Heimdall (investingfate)
+
+**Heimdall** is a macOS daemon — an "All-Seeing PR Guardian" and autonomous coding agent. Two workflows:
+
+1. **PR Review Watcher** — Polls GitHub for PRs awaiting review, sends macOS notifications, dispatches Claude Code to review in parallel.
+2. **Jira-to-PR Autonomous Implementation** — Polls Jira for new issues, AI-triages them (feasibility, scope, clarity), and upon approval, autonomously implements via Claude Code in an isolated git worktree, runs tests, opens a draft PR.
+
+### Architecture
+
+- **Two-loop model**: Watcher (fast, launchd-managed poll cycle) + Worker (long-lived Claude sessions for implementation)
+- **Plugin pattern**: `Source` interface (poll for items) + `Action` interface (execute side effects)
+  - Sources: `GitHubSource` (via `gh` CLI), `JiraSource` (REST API)
+  - Actions: `NotifyAction` (macOS notifications), `ReviewAction` (spawns `claude -p`), `TriageAction` (Claude triage)
+- **State**: JSON files in `~/.heimdall/` — `seen.json`, `queue/`, `triage/`, `reviews/`
+- **Daemon**: launchd LaunchAgent, embedded HTTP server on port 7878 for review reports
+- **Triage pipeline**: 3-gate AI scoring (acceptance clarity, feasibility, confidence) → verdict: ready/needs_detail/too_big/not_feasible
+
+### Key Entry Points
+
+| File | Purpose |
+|------|---------|
+| `src/index.ts` | CLI router |
+| `src/cli/run.ts` | Watcher orchestration (config → server → poll loop) |
+| `src/scheduler.ts` | Core cycle: `Source.poll()` → `filterNew()` → `Action.execute()` |
+| `src/worker.ts` | Picks queued items, spawns Claude, creates PR |
+| `src/actions/triage.ts` | Spawns Claude for structured triage, parses JSON verdict |
+| `src/actions/review.ts` | Creates worktree, spawns `claude -p`, saves report |
+| `src/types.ts` | All shared types |
+| `src/config.ts` | Config loading/validation from `~/.heimdall/config.json` |
+
+### Commands
+
+```
+heimdall run [--once]     # Start daemon or single poll cycle
+heimdall start|stop|status|logs  # Daemon lifecycle
+heimdall triage <KEY>     # View triage report + approve
+heimdall approve <KEY>    # Queue issue for implementation
+heimdall worker           # Start worker (picks up queued items)
+heimdall queue            # List queue items
+heimdall clean            # Remove old worktrees
+heimdall open <number>    # Open PR review in browser
+heimdall install|uninstall|reinstall  # launchd management
+```
+
+### Dependencies
+
+Only npm dep: `marked` (markdown rendering). Everything else is Bun built-ins + CLI tools (`gh`, `claude`, `git`, `terminal-notifier`).
+
+### Dev Commands
+
+```bash
+bun run src/index.ts run --once  # Dev: single poll cycle
+bun test                         # Run all tests
+bun run build                    # Compile to standalone macOS binary
+```
+
+### Design Docs
+
+- `docs/specs/2026-04-13-heimdall-design.md` — Architecture & data flow
+- `docs/superpowers/specs/2026-04-14-jira-autonomous-implementation-design.md` — Two-loop design, triage, worker
+- `docs/superpowers/specs/2026-04-20-triage-gates-design.md` — Gate implementation details
+
 ---
 
 ## CLI Tools
