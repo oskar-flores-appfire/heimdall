@@ -359,9 +359,12 @@ export class Worker {
   }
 
   private async createWorktree(repoCwd: string, worktreePath: string, branch: string): Promise<void> {
-    this.logger.info(`Creating worktree: ${worktreePath} (branch: ${branch})`);
+    this.logger.info(`Creating worktree: ${worktreePath} (branch: ${branch}) from origin/main`);
+    // Fetch latest main to avoid branching from stale or unrelated HEAD
+    const fetch = Bun.spawn(["git", "fetch", "origin", "main"], { cwd: repoCwd, stdout: "pipe", stderr: "pipe" });
+    await fetch.exited;
     const proc = Bun.spawn(
-      ["git", "worktree", "add", worktreePath, "-b", branch],
+      ["git", "worktree", "add", worktreePath, "-b", branch, "origin/main"],
       { cwd: repoCwd, stdout: "pipe", stderr: "pipe" }
     );
     const [exitCode, , stderr] = await Promise.all([
