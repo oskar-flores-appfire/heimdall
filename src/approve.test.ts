@@ -37,6 +37,7 @@ test("approves a ready issue", async () => {
   const queued = await Bun.file(join(QUEUE_DIR, "TEST-1.json")).json();
   expect(queued.issueKey).toBe("TEST-1");
   expect(queued.status).toBe("pending");
+  expect(queued.issueType).toBe("");
 });
 
 test("rejects when no triage report exists", async () => {

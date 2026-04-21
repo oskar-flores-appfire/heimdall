@@ -157,6 +157,7 @@ export interface QueueItem {
   error?: string;
   systemPromptFile?: string;
   allowedTools?: string[];
+  issueType?: string;
 }
 
 export interface ImplementationSummary {

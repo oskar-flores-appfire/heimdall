@@ -67,6 +67,7 @@ export async function approveIssue(
     cwd: resolveHomePath(projectConfig.cwd),
     systemPromptFile: projectConfig.systemPromptFile,
     allowedTools: projectConfig.allowedTools,
+    issueType: report.issue.issueType,
   };
 
   await queue.enqueue(item);
