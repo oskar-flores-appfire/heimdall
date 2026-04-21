@@ -240,11 +240,15 @@ export class Worker {
     await this.queue.update(item.issueKey, { status: "in_progress" });
 
     const worktreePath = join(this.worktreeDir, item.issueKey);
-    const branch = `heimdall/${item.issueKey}`;
 
     try {
+      // Gate 1: Resolve branch name from repo conventions
+      const branch = await this.resolveBranchName(item);
+
+      // Gate 2: Create worktree and push branch for collaboration
       await this.createWorktree(item.cwd, worktreePath, branch);
       await this.queue.update(item.issueKey, { branch });
+      await this.pushBranch(worktreePath, branch);
 
       let triageContent = "";
       if (existsSync(item.triageReport)) {
