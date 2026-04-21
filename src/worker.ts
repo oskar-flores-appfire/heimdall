@@ -127,6 +127,27 @@ ${branchSection}
 Based on the repository's documented conventions and existing branch naming patterns, reply with ONLY the branch name. Nothing else.`;
 }
 
+export function parseBranchName(raw: string): string | null {
+  // Strip markdown code fences
+  const cleaned = raw.replace(/```\w*/g, "").trim();
+
+  // Take first non-empty line
+  const line = cleaned
+    .split("\n")
+    .map((l) => l.trim())
+    .find((l) => l.length > 0);
+
+  if (!line) return null;
+
+  // Basic git ref validation: no spaces, no ~^:?*[\, no double dots, no trailing dot/slash
+  if (/[\s~^:?*\[\]\\]/.test(line)) return null;
+  if (line.includes("..")) return null;
+  if (line.endsWith(".") || line.endsWith("/")) return null;
+  if (line.startsWith("-")) return null;
+
+  return line;
+}
+
 // --- PR body builder ---
 
 export function buildPrBody(

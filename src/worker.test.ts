@@ -1,5 +1,5 @@
 import { test, expect } from "bun:test";
-import { buildBranchResolutionPrompt } from "./worker";
+import { buildBranchResolutionPrompt, parseBranchName } from "./worker";
 
 test("buildBranchResolutionPrompt includes issue key and title", () => {
   const prompt = buildBranchResolutionPrompt({
@@ -32,4 +32,37 @@ test("buildBranchResolutionPrompt handles missing docs", () => {
   expect(prompt).toContain("No CLAUDE.md found");
   expect(prompt).toContain("No AGENTS.md found");
   expect(prompt).toContain("No remote branches found");
+});
+
+test("parseBranchName extracts first non-empty line", () => {
+  expect(parseBranchName("\n  feature/PROJ-42-login \n\nsome extra text")).toBe(
+    "feature/PROJ-42-login"
+  );
+});
+
+test("parseBranchName strips markdown code fences", () => {
+  expect(parseBranchName("```\nfeature/PROJ-42-login\n```")).toBe(
+    "feature/PROJ-42-login"
+  );
+});
+
+test("parseBranchName returns null for empty response", () => {
+  expect(parseBranchName("")).toBeNull();
+  expect(parseBranchName("   \n  \n  ")).toBeNull();
+});
+
+test("parseBranchName returns null for names with spaces", () => {
+  expect(parseBranchName("feature PROJ-42 login")).toBeNull();
+});
+
+test("parseBranchName returns null for names with invalid chars", () => {
+  expect(parseBranchName("feature/PROJ~42")).toBeNull();
+  expect(parseBranchName("feature/PROJ^42")).toBeNull();
+  expect(parseBranchName("feature/PROJ:42")).toBeNull();
+});
+
+test("parseBranchName allows slashes and dashes", () => {
+  expect(parseBranchName("bugfix/PROJ-42-fix-crash")).toBe(
+    "bugfix/PROJ-42-fix-crash"
+  );
 });
