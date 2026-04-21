@@ -24,8 +24,13 @@ export async function workerCmd(): Promise<void> {
     return;
   }
 
-  const processed = await worker.processNext();
-  if (!processed) {
-    console.log("No pending items in queue.");
+  worker.startHeartbeat();
+  try {
+    const processed = await worker.processNext();
+    if (!processed) {
+      console.log("No pending items in queue.");
+    }
+  } finally {
+    worker.stopHeartbeat();
   }
 }
