@@ -34,7 +34,7 @@ async function executeCycle(
     if (srcConfig.type === "jira") {
       const jiraConfig = srcConfig as JiraSourceConfig;
       const jiraSource = new JiraSource(jiraConfig, logger);
-      const triageAction = new TriageAction(config.triage, logger);
+      const triageAction = new TriageAction(config.triage, jiraConfig, logger);
       const notifyAction = actions.find((a) => a.name === "notify") as NotifyAction | undefined;
 
       await runJiraCycle({
@@ -42,14 +42,15 @@ async function executeCycle(
         triage: (issue) => triageAction.triage(issue),
         notify: async (issue, report) => {
           if (!notifyAction) return;
+          const triageUrl = `http://localhost:${config.server.port}/triage/${issue.key}`;
           if (report.verdict === "ready") {
-            await notifyAction.notifyTriage(issue, report);
+            await notifyAction.notifyTriage(issue, report, triageUrl);
           } else if (report.verdict === "needs_detail") {
-            await notifyAction.notifyNeedsDetail(issue, report);
+            await notifyAction.notifyNeedsDetail(issue, report, triageUrl);
           } else if (report.verdict === "not_feasible") {
-            await notifyAction.notifyNotFeasible(issue, report);
+            await notifyAction.notifyNotFeasible(issue, report, triageUrl);
           } else {
-            await notifyAction.notifyTooBig(issue, report);
+            await notifyAction.notifyTooBig(issue, report, triageUrl);
           }
         },
         state,

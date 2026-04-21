@@ -2,6 +2,7 @@ import { mkdirSync } from "fs";
 import { join, dirname } from "path";
 import type {
   JiraIssue,
+  JiraSourceConfig,
   TriageResult,
   TriageVerdict,
   TriageReport,
@@ -9,10 +10,15 @@ import type {
 } from "../types";
 import type { Logger } from "../logger";
 import { HEIMDALL_DIR, resolveHomePath } from "../config";
+import { fetchReferencedDocs, type ReferencedDoc } from "../reference-docs";
 
 const SIZE_ORDER = ["S", "M", "L", "XL"] as const;
 
-export function buildTriagePrompt(issue: JiraIssue): string {
+export function buildTriagePrompt(issue: JiraIssue, referencedDocs?: ReferencedDoc[]): string {
+  const docsSection = referencedDocs?.length
+    ? `\n## Referenced Documents\nThe following documents were linked in the issue description:\n\n${referencedDocs.map((d) => `### ${d.title}\nSource: ${d.url}\n\n${d.content}`).join("\n\n---\n\n")}\n`
+    : "";
+
   return `You are evaluating a Jira issue for automated implementation by an AI coding agent.
 
 ## Issue
@@ -23,6 +29,7 @@ Status: ${issue.status}
 
 ## Description
 ${issue.description}
+${docsSection}
 
 ## Gate 1: Scoring Rubric
 Rate each criterion 0-3:
@@ -203,11 +210,18 @@ export function buildMermaidDiagram(
 export class TriageAction {
   constructor(
     private readonly config: TriageConfig,
+    private readonly jiraConfig: JiraSourceConfig | null,
     private readonly logger: Logger
   ) {}
 
   async triage(issue: JiraIssue): Promise<TriageReport> {
-    const prompt = buildTriagePrompt(issue);
+    let referencedDocs: ReferencedDoc[] = [];
+    if (this.jiraConfig && issue.referenceUrls.length > 0) {
+      this.logger.info(`Fetching ${issue.referenceUrls.length} referenced doc(s) for ${issue.key}`);
+      referencedDocs = await fetchReferencedDocs(issue.referenceUrls, this.jiraConfig, this.logger);
+    }
+
+    const prompt = buildTriagePrompt(issue, referencedDocs);
     this.logger.info(`Triaging ${issue.key}: ${issue.title}`);
 
     const startTime = Date.now();

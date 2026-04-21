@@ -87,30 +87,20 @@ export class NotifyAction implements Action {
     return count > this.maxPerCycle;
   }
 
-  async notifyTriage(issue: JiraIssue, report: TriageReport): Promise<ActionResult> {
+  async notifyTriage(issue: JiraIssue, report: TriageReport, triageUrl: string): Promise<ActionResult> {
     const score = `${report.result.total}/${report.result.max}`;
     const files = report.result.suggested_files.length;
     const conf = report.confidence ? report.confidence : "unknown";
     const message = `Score: ${score} | Size: ${report.result.size} | Confidence: ${conf} | ${files} file(s)`;
     try {
-      if (report.confidence === "low") {
-        await this.send(
-          `Heimdall — ${issue.key}`,
-          issue.title,
-          `${message}\nLow confidence — review recommended`,
-          issue.url,
-          `heimdall-triage-${issue.key}`
-        );
-      } else {
-        await this.sendTriage(
-          `Heimdall — ${issue.key}`,
-          issue.title,
-          message,
-          `heimdall triage ${issue.key}`,
-          `heimdall approve ${issue.key}`,
-          `heimdall-triage-${issue.key}`
-        );
-      }
+      await this.sendTriageNotification(
+        `Heimdall — ${issue.key}`,
+        issue.title,
+        message,
+        triageUrl,
+        `heimdall approve ${issue.key}`,
+        `heimdall-triage-${issue.key}`
+      );
       this.logger.info(`Triage notification sent: ${issue.key}`);
       return { action: "notify", success: true, message };
     } catch (err) {
@@ -119,7 +109,7 @@ export class NotifyAction implements Action {
     }
   }
 
-  async notifyNeedsDetail(issue: JiraIssue, report: TriageReport): Promise<ActionResult> {
+  async notifyNeedsDetail(issue: JiraIssue, report: TriageReport, triageUrl: string): Promise<ActionResult> {
     const score = `${report.result.total}/${report.result.max}`;
     const message = `Score: ${score} — ${report.result.concerns}`;
     try {
@@ -127,7 +117,7 @@ export class NotifyAction implements Action {
         `Heimdall — ${issue.key}`,
         issue.title,
         message,
-        issue.url,
+        triageUrl,
         `heimdall-triage-${issue.key}`
       );
       this.logger.info(`Needs-detail notification: ${issue.key}`);
@@ -138,14 +128,14 @@ export class NotifyAction implements Action {
     }
   }
 
-  async notifyTooBig(issue: JiraIssue, report: TriageReport): Promise<ActionResult> {
+  async notifyTooBig(issue: JiraIssue, report: TriageReport, triageUrl: string): Promise<ActionResult> {
     const message = `Size: ${report.result.size} — too large for autonomous implementation. Consider decomposing.`;
     try {
       await this.send(
         `Heimdall — ${issue.key}`,
         issue.title,
         message,
-        issue.url,
+        triageUrl,
         `heimdall-triage-${issue.key}`
       );
       this.logger.info(`Too-big notification: ${issue.key}`);
@@ -156,7 +146,7 @@ export class NotifyAction implements Action {
     }
   }
 
-  async notifyNotFeasible(issue: JiraIssue, report: TriageReport): Promise<ActionResult> {
+  async notifyNotFeasible(issue: JiraIssue, report: TriageReport, triageUrl: string): Promise<ActionResult> {
     const reasoning = report.result.feasibility?.reasoning ?? "Agent cannot tackle this autonomously";
     const message = `Not feasible — ${reasoning}`;
     try {
@@ -164,7 +154,7 @@ export class NotifyAction implements Action {
         `Heimdall — ${issue.key}`,
         issue.title,
         message,
-        issue.url,
+        triageUrl,
         `heimdall-triage-${issue.key}`
       );
       this.logger.info(`Not-feasible notification: ${issue.key}`);
@@ -242,23 +232,23 @@ export class NotifyAction implements Action {
     }
   }
 
-  private async sendTriage(
+  private async sendTriageNotification(
     title: string,
     subtitle: string,
     message: string,
-    clickCommand: string,
+    triageUrl: string,
     approveCommand: string,
     group: string
   ): Promise<void> {
     if (this.notifier === "terminal-notifier") {
-      const wrapperScript = `if [ "$TERMINAL_NOTIFIER_ACTIVATION_TYPE" = "actionClicked" ]; then ${approveCommand}; else ${clickCommand}; fi`;
       const proc = Bun.spawn([
         "terminal-notifier",
         "-title", title,
         "-subtitle", subtitle,
         "-message", message,
-        "-execute", wrapperScript,
+        "-open", triageUrl,
         "-actions", "Approve",
+        "-execute", approveCommand,
         "-sound", this.sound,
         "-group", group,
       ]);

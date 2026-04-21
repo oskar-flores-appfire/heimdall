@@ -13,6 +13,35 @@ export function adfToText(node: any): string {
   return "";
 }
 
+/** Extract URLs from ADF link marks and inlineCard nodes */
+export function extractUrlsFromAdf(node: any): string[] {
+  if (!node) return [];
+  const urls: string[] = [];
+
+  // Text node with link mark
+  if (node.type === "text" && Array.isArray(node.marks)) {
+    for (const mark of node.marks) {
+      if (mark.type === "link" && mark.attrs?.href) {
+        urls.push(mark.attrs.href);
+      }
+    }
+  }
+
+  // inlineCard node (Smart Links)
+  if (node.type === "inlineCard" && node.attrs?.url) {
+    urls.push(node.attrs.url);
+  }
+
+  // Recurse into children
+  if (Array.isArray(node.content)) {
+    for (const child of node.content) {
+      urls.push(...extractUrlsFromAdf(child));
+    }
+  }
+
+  return urls;
+}
+
 export class JiraSource {
   readonly name = "jira";
 
@@ -53,6 +82,7 @@ export class JiraSource {
         assignee: issue.fields.assignee?.emailAddress || "",
         status: issue.fields.status.name,
         issueType: issue.fields.issuetype.name,
+        referenceUrls: extractUrlsFromAdf(issue.fields.description),
       }));
 
       this.logger.info(`Found ${issues.length} Jira issue(s)`);

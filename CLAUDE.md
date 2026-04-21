@@ -18,8 +18,9 @@ alwaysApply: true
   - Sources: `GitHubSource` (via `gh` CLI), `JiraSource` (REST API)
   - Actions: `NotifyAction` (macOS notifications), `ReviewAction` (spawns `claude -p`), `TriageAction` (Claude triage)
 - **State**: JSON files in `~/.heimdall/` — `seen.json`, `queue/`, `triage/`, `reviews/`
-- **Daemon**: launchd LaunchAgent, embedded HTTP server on port 7878 for review reports
+- **Daemon**: launchd LaunchAgent, embedded HTTP server on port 7878 for review + triage reports
 - **Triage pipeline**: 3-gate AI scoring (acceptance clarity, feasibility, confidence) → verdict: ready/needs_detail/too_big/not_feasible
+- **Reference doc fetching**: Triage auto-fetches Confluence pages and GitHub docs linked in Jira descriptions (allowlisted to configured base URLs and repos)
 
 ### Key Entry Points
 
@@ -31,6 +32,7 @@ alwaysApply: true
 | `src/worker.ts` | Picks queued items, spawns Claude, creates PR |
 | `src/actions/triage.ts` | Spawns Claude for structured triage, parses JSON verdict |
 | `src/actions/review.ts` | Creates worktree, spawns `claude -p`, saves report |
+| `src/reference-docs.ts` | Fetches Confluence/GitHub docs referenced in Jira issues (allowlisted) |
 | `src/types.ts` | All shared types |
 | `src/config.ts` | Config loading/validation from `~/.heimdall/config.json` |
 

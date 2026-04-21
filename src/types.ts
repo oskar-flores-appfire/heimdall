@@ -108,6 +108,7 @@ export interface JiraIssue {
   assignee: string;
   status: string;
   issueType: string;
+  referenceUrls: string[];
 }
 
 export interface TriageResult {

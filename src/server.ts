@@ -2,10 +2,10 @@ import { Glob } from "bun";
 import { join } from "path";
 import { existsSync } from "fs";
 import { marked } from "marked";
-import type { HeimdallConfig, ReviewVerdict } from "./types";
+import type { HeimdallConfig, ReviewVerdict, TriageVerdict } from "./types";
 import type { Logger } from "./logger";
 import { parseVerdict } from "./verdict";
-import { resolveHomePath } from "./config";
+import { resolveHomePath, HEIMDALL_DIR } from "./config";
 
 // --- Types ---
 
@@ -197,6 +197,127 @@ async function renderReview(
   return pageShell(`PR-${number} — ${owner}/${repo}`, header + html);
 }
 
+// --- Triage types ---
+
+interface TriageEntry {
+  key: string;
+  title: string;
+  score: string;
+  size: string;
+  verdict: TriageVerdict;
+  confidence: string;
+  date: string;
+}
+
+// --- Triage verdict badge ---
+
+function triageVerdictBadge(verdict: TriageVerdict): string {
+  const colors: Record<TriageVerdict, string> = {
+    ready: "#22c55e",
+    needs_detail: "#eab308",
+    too_big: "#ef4444",
+    not_feasible: "#6b7280",
+  };
+  const labels: Record<TriageVerdict, string> = {
+    ready: "READY",
+    needs_detail: "NEEDS DETAIL",
+    too_big: "TOO BIG",
+    not_feasible: "NOT FEASIBLE",
+  };
+  const bg = colors[verdict];
+  return `<span style="display:inline-block;padding:2px 10px;border-radius:12px;background:${bg};color:#fff;font-size:0.85em;font-weight:600;">${labels[verdict]}</span>`;
+}
+
+// --- Triage discovery ---
+
+async function discoverTriageReports(triageDir: string): Promise<TriageEntry[]> {
+  if (!existsSync(triageDir)) return [];
+
+  const glob = new Glob("*.json");
+  const entries: TriageEntry[] = [];
+
+  for await (const path of glob.scan({ cwd: triageDir })) {
+    const fullPath = join(triageDir, path);
+    try {
+      const report = await Bun.file(fullPath).json();
+      entries.push({
+        key: report.issue.key,
+        title: report.issue.title,
+        score: `${report.result.total}/${report.result.max}`,
+        size: report.result.size,
+        verdict: report.verdict,
+        confidence: report.confidence ?? "—",
+        date: report.timestamp,
+      });
+    } catch {
+      // skip malformed files
+    }
+  }
+
+  entries.sort((a, b) => (b.date > a.date ? 1 : b.date < a.date ? -1 : 0));
+  return entries;
+}
+
+// --- Triage listing page ---
+
+function renderTriageListing(entries: TriageEntry[]): string {
+  if (entries.length === 0) {
+    return pageShell("Triage", "<h1>Heimdall Triage Reports</h1><p>No triage reports found.</p>");
+  }
+
+  let rows = "";
+  for (const e of entries) {
+    rows += `<tr>
+  <td><a href="/triage/${e.key}">${e.key}</a></td>
+  <td>${escapeHtml(e.title)}</td>
+  <td>${e.score}</td>
+  <td>${e.size}</td>
+  <td>${triageVerdictBadge(e.verdict)}</td>
+  <td>${e.confidence}</td>
+  <td>${e.date ? new Date(e.date).toLocaleDateString() : ""}</td>
+</tr>\n`;
+  }
+
+  const body = `<h1>Heimdall Triage Reports</h1>
+<table>
+<tr><th>Issue</th><th>Title</th><th>Score</th><th>Size</th><th>Verdict</th><th>Confidence</th><th>Date</th></tr>
+${rows}
+</table>`;
+
+  return pageShell("Triage", body);
+}
+
+// --- Single triage detail page ---
+
+async function renderTriageDetail(
+  triageDir: string,
+  issueKey: string
+): Promise<string | null> {
+  const mdPath = join(triageDir, `${issueKey}.md`);
+  if (!existsSync(mdPath)) return null;
+
+  const content = await Bun.file(mdPath).text();
+
+  const jsonPath = join(triageDir, `${issueKey}.json`);
+  let verdict: TriageVerdict = "not_feasible";
+  let jiraUrl = "";
+  if (existsSync(jsonPath)) {
+    const report = await Bun.file(jsonPath).json();
+    verdict = report.verdict;
+    jiraUrl = report.issue?.url || "";
+  }
+
+  const html = markdownToHtml(content);
+
+  const header = `<div class="back"><a href="/triage">&larr; All Triage Reports</a></div>
+<div style="display:flex;align-items:center;gap:1em;margin-bottom:1em;">
+  ${triageVerdictBadge(verdict)}
+  ${jiraUrl ? `<a href="${jiraUrl}" target="_blank">Open in Jira &rarr;</a>` : ""}
+</div>`;
+
+  return pageShell(`Triage — ${issueKey}`, header + html);
+}
+
 // --- Route matching ---
 
 function matchRoute(pathname: string): { owner: string; repo: string; number: number } | null {
@@ -205,10 +326,16 @@ function matchRoute(pathname: string): { owner: string; repo: string; number: nu
   return { owner: m[1], repo: m[2], number: parseInt(m[3], 10) };
 }
 
+function matchTriageRoute(pathname: string): string | null {
+  const m = pathname.match(/^\/triage\/([A-Z]+-\d+)$/);
+  return m ? m[1] : null;
+}
+
 // --- Server ---
 
 export function startServer(config: HeimdallConfig, logger: Logger) {
   const reportsDir = resolveHomePath(config.reports.dir);
+  const triageDir = resolveHomePath(`${HEIMDALL_DIR}/triage`);
 
   const server = Bun.serve({
     port: config.server.port,
@@ -234,9 +361,30 @@ export function startServer(config: HeimdallConfig, logger: Logger) {
       }
 
       // GET /reviews/:owner/:repo/PR-:number -> single review
-      const params = matchRoute(pathname);
-      if (params) {
-        const html = await renderReview(reportsDir, params.owner, params.repo, params.number);
+      const reviewParams = matchRoute(pathname);
+      if (reviewParams) {
+        const html = await renderReview(reportsDir, reviewParams.owner, reviewParams.repo, reviewParams.number);
+        if (!html) {
+          return new Response("Not Found", { status: 404 });
+        }
+        return new Response(html, {
+          headers: { "Content-Type": "text/html; charset=utf-8" },
+        });
+      }
+
+      // GET /triage -> triage listing
+      if (pathname === "/triage") {
+        const entries = await discoverTriageReports(triageDir);
+        const html = renderTriageListing(entries);
+        return new Response(html, {
+          headers: { "Content-Type": "text/html; charset=utf-8" },
+        });
+      }
+
+      // GET /triage/:issueKey -> triage detail
+      const triageKey = matchTriageRoute(pathname);
+      if (triageKey) {
+        const html = await renderTriageDetail(triageDir, triageKey);
         if (!html) {
           return new Response("Not Found", { status: 404 });
         }
