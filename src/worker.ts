@@ -358,13 +358,22 @@ export class Worker {
     }
   }
 
+  private async detectDefaultBranch(repoCwd: string): Promise<string> {
+    const proc = Bun.spawn(
+      ["git", "rev-parse", "--verify", "--quiet", "refs/remotes/origin/main"],
+      { cwd: repoCwd, stdout: "pipe", stderr: "pipe" }
+    );
+    const exitCode = await proc.exited;
+    return exitCode === 0 ? "main" : "master";
+  }
+
   private async createWorktree(repoCwd: string, worktreePath: string, branch: string): Promise<void> {
-    this.logger.info(`Creating worktree: ${worktreePath} (branch: ${branch}) from origin/main`);
-    // Fetch latest main to avoid branching from stale or unrelated HEAD
-    const fetch = Bun.spawn(["git", "fetch", "origin", "main"], { cwd: repoCwd, stdout: "pipe", stderr: "pipe" });
+    const defaultBranch = await this.detectDefaultBranch(repoCwd);
+    this.logger.info(`Creating worktree: ${worktreePath} (branch: ${branch}) from origin/${defaultBranch}`);
+    const fetch = Bun.spawn(["git", "fetch", "origin", defaultBranch], { cwd: repoCwd, stdout: "pipe", stderr: "pipe" });
     await fetch.exited;
     const proc = Bun.spawn(
-      ["git", "worktree", "add", worktreePath, "-b", branch, "origin/main"],
+      ["git", "worktree", "add", worktreePath, "-b", branch, `origin/${defaultBranch}`],
       { cwd: repoCwd, stdout: "pipe", stderr: "pipe" }
     );
     const [exitCode, , stderr] = await Promise.all([
@@ -510,8 +519,9 @@ export class Worker {
   }
 
   private async countChangedFiles(worktreePath: string): Promise<number> {
+    const defaultBranch = await this.detectDefaultBranch(worktreePath);
     const proc = Bun.spawn(
-      ["git", "diff", "--name-only", "main...HEAD"],
+      ["git", "diff", "--name-only", `${defaultBranch}...HEAD`],
       { cwd: worktreePath, stdout: "pipe", stderr: "pipe" }
     );
     const [exitCode, stdout] = await Promise.all([
