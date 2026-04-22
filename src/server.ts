@@ -374,7 +374,10 @@ async function renderTriageDetail(
       : queueStatus === "in_progress"
         ? "In progress&hellip;"
         : `Queued (${queueStatus})`;
-    stickyBar = `<div class="sticky-bar"><span>${triageVerdictBadge(verdict)} ${confidence ? `&middot; ${confidence} confidence` : ""}</span><span>${statusText}</span></div><div class="sticky-bar-spacer"></div>`;
+    const retryBtn = queueStatus === "failed"
+      ? `<form method="POST" action="/queue/${issueKey}/reset" style="display:inline;margin-left:8px;"><button type="submit" class="btn btn-primary">Retry</button></form>`
+      : "";
+    stickyBar = `<div class="sticky-bar"><span>${triageVerdictBadge(verdict)} ${confidence ? `&middot; ${confidence} confidence` : ""}</span><span>${statusText}${retryBtn}</span></div><div class="sticky-bar-spacer"></div>`;
   } else if (verdict === "ready") {
     stickyBar = `<div class="sticky-bar"><span>${triageVerdictBadge(verdict)} ${confidence ? `&middot; ${confidence} confidence` : ""}</span><form method="POST" action="/triage/${issueKey}/approve"><button type="submit" class="btn btn-primary">Approve</button></form></div><div class="sticky-bar-spacer"></div>`;
   }
@@ -408,11 +411,12 @@ async function renderDashboard(
     workerText = `<span class="status-dot status-active"></span>Worker: <a href="/triage/${inProgress.issueKey}">${inProgress.issueKey}</a> (${elapsed}m)`;
   }
 
-  // Queue summary
-  const activeItems = queueItems.filter((i) => i.status === "pending" || i.status === "in_progress");
+  // Queue summary (pending, in_progress, failed)
+  const activeItems = queueItems.filter((i) => i.status === "pending" || i.status === "in_progress" || i.status === "failed");
   let queueRows = "";
   for (const item of activeItems.slice(0, 5)) {
-    const statusColor = item.status === "in_progress" ? "#eab308" : "#8b949e";
+    const statusColors: Record<string, string> = { in_progress: "#eab308", pending: "#8b949e", failed: "#ef4444" };
+    const statusColor = statusColors[item.status] ?? "#8b949e";
     queueRows += `<tr><td><a href="/triage/${item.issueKey}">${item.issueKey}</a></td><td>${escapeHtml(item.title.length > 50 ? item.title.slice(0, 50) + "…" : item.title)}</td><td><span class="badge" style="background:${statusColor}">${item.status}</span></td><td>${new Date(item.approvedAt).toLocaleString()}</td></tr>\n`;
   }
 
@@ -491,10 +495,13 @@ async function renderQueuePage(queueDir: string, heimdallDir: string): Promise<s
     const colors: Record<string, string> = { pending: "#6b7280", in_progress: "#eab308", completed: "#22c55e", failed: "#ef4444" };
     const bg = colors[item.status] ?? "#6b7280";
     const prLink = item.prUrl ? `<a href="${item.prUrl}" target="_blank">PR &rarr;</a>` : "";
+    const resetBtn = item.status === "failed"
+      ? `<form method="POST" action="/queue/${item.issueKey}/reset" style="display:inline;"><button type="submit" class="btn" style="background:#6b7280;color:#fff;font-size:0.8em;padding:2px 8px;">Reset</button></form>`
+      : "";
     rows += `<tr>
   <td><a href="/triage/${item.issueKey}">${item.issueKey}</a></td>
   <td>${escapeHtml(item.title)}</td>
-  <td><span class="badge" style="background:${bg}">${item.status}</span></td>
+  <td><span class="badge" style="background:${bg}">${item.status}</span> ${resetBtn}</td>
   <td>${new Date(item.approvedAt).toLocaleDateString()}</td>
   <td>${item.branch ?? ""}</td>
   <td>${prLink}</td>
@@ -604,6 +611,35 @@ export function startServer(config: HeimdallConfig, logger: Logger, opts?: { con
         return new Response(html, {
           headers: { "Content-Type": "text/html; charset=utf-8" },
         });
+      }
+
+      // POST /queue/:key/reset
+      const resetMatch = pathname.match(/^\/queue\/([A-Z]+-\d+)\/reset$/);
+      if (resetMatch && req.method === "POST") {
+        const key = resetMatch[1];
+        const { QueueManager } = await import("./queue");
+        const queueManager = new QueueManager(queueDir);
+        const item = await queueManager.get(key);
+        if (!item) {
+          return new Response(null, { status: 303, headers: { Location: `/queue?error=not-found` } });
+        }
+        if (item.status !== "failed") {
+          return new Response(null, { status: 303, headers: { Location: `/queue?error=not-failed` } });
+        }
+
+        // Clean up worktree + local branch
+        if (item.branch && item.cwd) {
+          const worktreePath = join(resolveHomePath(HEIMDALL_DIR), "worktrees", key);
+          Bun.spawn(["rm", "-rf", worktreePath], { stdout: "pipe", stderr: "pipe" });
+          const prune = Bun.spawn(["git", "worktree", "prune"], { cwd: item.cwd, stdout: "pipe", stderr: "pipe" });
+          await prune.exited;
+          const del = Bun.spawn(["git", "branch", "-D", item.branch], { cwd: item.cwd, stdout: "pipe", stderr: "pipe" });
+          await del.exited;
+        }
+
+        await queueManager.update(key, { status: "pending", branch: undefined, prUrl: undefined, error: undefined } as any);
+        logger.info(`Reset queue item ${key} to pending from web UI`);
+        return new Response(null, { status: 303, headers: { Location: "/queue" } });
       }
 
       // GET /queue

@@ -12,7 +12,9 @@
     "build": "bun run scripts/build.ts",
     "build:sign": "bun run scripts/build.ts --sign",
     "verify": "bun run scripts/verify.ts",
-    "notarize:status": "bun run scripts/notarize-status.ts"
+    "notarize:status": "bun run scripts/notarize-status.ts",
+    "reset:review": "bun run scripts/reset-review.ts",
+    "reset:issue": "bun run scripts/reset-issue.ts"
   },
   "dependencies": {
     "marked": "^18.0.1"
