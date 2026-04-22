@@ -173,6 +173,8 @@ export interface ImplementationSummary {
   prUrl: string;
   status: "complete" | "incomplete";
   error?: string;
+  implementationResult?: string;
+  changedFiles?: string[];
 }
 
 // --- Config types (extended) ---
