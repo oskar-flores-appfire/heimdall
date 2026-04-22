@@ -200,8 +200,11 @@ bun run build.ts          # compiles to ./dist/heimdall (~58MB standalone binary
 ## Development
 
 ```bash
-bun test                  # run all tests
-bun run src/index.ts run  # test a poll cycle
+bun test                          # run all tests
+bun run src/index.ts run          # test a poll cycle
+bun run reset:review <repo> <n>   # re-review a PR (e.g. appfire-team/signal-iq 79)
+bun run reset:issue <KEY>         # retry a failed issue (e.g. ITRE-160)
+bun run reset:issue <KEY> --remote  # also delete remote branch
 ```
 
 ## Architecture
