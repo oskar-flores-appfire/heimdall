@@ -101,6 +101,7 @@ function pageShell(title: string, body: string, activePage?: string): string {
 <nav>${nav}</nav>
 ${body}
 </article>
+<script type="module">import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs";mermaid.initialize({startOnLoad:false,theme:"dark"});document.querySelectorAll("code.language-mermaid").forEach(el=>{const pre=el.parentElement;const div=document.createElement("div");div.className="mermaid";div.textContent=el.textContent;pre.replaceWith(div);});mermaid.run();</script>
 </body>
 </html>`;
 }
