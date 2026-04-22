@@ -58,8 +58,6 @@ describe("ReviewAction", () => {
 
   it("generates correct report path", () => {
     const action = new ReviewAction(
-      "claude",
-      ["-p", "--output-format", "text"],
       REPORTS_DIR,
       WORKTREE_DIR,
       logger

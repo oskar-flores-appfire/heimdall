@@ -92,8 +92,6 @@ Config lives at `~/.heimdall/config.json`:
     },
     "review": {
       "enabled": true,
-      "command": "claude",
-      "defaultArgs": ["-p", "--permission-mode", "auto", "--output-format", "text"],
       "repos": {
         "owner/repo": {
           "prompt": "Review PR #{{pr_number}}...",
@@ -112,8 +110,7 @@ Config lives at `~/.heimdall/config.json`:
     "maxParallel": 1,
     "model": "opus",
     "worktreeDir": "~/.heimdall/worktrees",
-    "maxTurns": 100,
-    "claudeArgs": ["--permission-mode", "auto", "--output-format", "stream-json"]
+    "maxTurns": 100
   }
 }
 ```

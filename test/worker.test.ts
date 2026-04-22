@@ -3,7 +3,6 @@ import { calculateCost, parseStreamJson, formatDuration, buildImplementationProm
 import type { QueueItem, CostConfig } from "../src/types";
 import { mkdirSync, rmSync, existsSync } from "fs";
 import { join } from "path";
-import { resolveHomePath } from "../src/config";
 
 const testCosts: CostConfig = {
   "claude-opus-4-6": { inputPer1k: 0.015, outputPer1k: 0.075 },
@@ -161,39 +160,3 @@ describe("approve config forwarding", () => {
   });
 });
 
-describe("spawnClaude arg building", () => {
-  it("builds args with --append-system-prompt when systemPromptFile exists", async () => {
-    const skillDir = "/tmp/heimdall-skill-test";
-    mkdirSync(skillDir, { recursive: true });
-    const skillFile = join(skillDir, "test-skill");
-    await Bun.write(skillFile, "You are a code reviewer. Follow DDD principles.");
-
-    const item: import("../src/types").QueueItem = {
-      issueKey: "SIQ-42",
-      title: "Test",
-      description: "Desc",
-      approvedAt: "",
-      status: "pending",
-      triageReport: "",
-      repo: "org/repo",
-      cwd: "/path",
-      systemPromptFile: skillFile,
-    };
-
-    const resolvedPath = resolveHomePath(item.systemPromptFile!);
-    expect(existsSync(resolvedPath)).toBe(true);
-    const content = await Bun.file(resolvedPath).text();
-    expect(content).toBe("You are a code reviewer. Follow DDD principles.");
-
-    rmSync(skillDir, { recursive: true });
-  });
-
-  it("builds args with --allowlist-tools when allowedTools provided", () => {
-    const tools = ["Read", "Edit", "Write", "Bash"];
-    const args: string[] = [];
-    if (tools.length) {
-      args.push("--allowlist-tools", tools.join(","));
-    }
-    expect(args).toEqual(["--allowlist-tools", "Read,Edit,Write,Bash"]);
-  });
-});

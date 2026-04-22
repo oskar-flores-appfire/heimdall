@@ -29,9 +29,10 @@ alwaysApply: true
 | `src/index.ts` | CLI router |
 | `src/cli/run.ts` | Watcher orchestration (config → server → poll loop) |
 | `src/scheduler.ts` | Core cycle: `Source.poll()` → `filterNew()` → `Action.execute()` |
+| `src/claude.ts` | Shared Claude CLI spawn utility (args, env, stderr, timeout) |
 | `src/worker.ts` | Picks queued items, spawns Claude, creates PR |
-| `src/actions/triage.ts` | Spawns Claude for structured triage, parses JSON verdict |
-| `src/actions/review.ts` | Creates worktree, spawns `claude -p`, saves report |
+| `src/actions/triage.ts` | Structured triage, parses JSON verdict |
+| `src/actions/review.ts` | Creates worktree, runs review, saves report |
 | `src/reference-docs.ts` | Fetches Confluence/GitHub docs referenced in Jira issues (allowlisted) |
 | `src/types.ts` | All shared types |
 | `src/config.ts` | Config loading/validation from `~/.heimdall/config.json` |
