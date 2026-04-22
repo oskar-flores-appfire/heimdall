@@ -12,6 +12,7 @@ import { QueueManager } from "./queue";
 import { NotifyAction } from "./actions/notify";
 import { HEIMDALL_DIR, resolveHomePath } from "./config";
 import { writePid, writeHeartbeat, clearHeartbeatFiles } from "./heartbeat";
+import { spawnClaude } from "./claude";
 
 // --- Pure utility functions (tested) ---
 
@@ -260,7 +261,7 @@ export class Worker {
 
       const implStart = Date.now();
       const prompt = buildImplementationPrompt(item, triageContent, worktreePath);
-      const claudeResult = await this.spawnClaude(prompt, worktreePath, item);
+      const claudeResult = await this.spawnImplementation(prompt, worktreePath, item);
       const implSeconds = (Date.now() - implStart) / 1000;
 
       if (claudeResult.exitCode !== 0 && claudeResult.stderr) {
@@ -437,27 +438,21 @@ export class Worker {
         branches: context.branches,
       });
 
-      const triageModel = this.config.triage.model;
-      const proc = Bun.spawn(
-        ["claude", "-p", prompt, "--model", triageModel, "--output-format", "text", "--permission-mode", "auto"],
-        { cwd: item.cwd, stdout: "pipe", stderr: "pipe" }
-      );
+      const result = await spawnClaude({
+        prompt,
+        model: this.config.triage.model,
+        outputFormat: "text",
+        cwd: item.cwd,
+        timeout: 30_000,
+      });
 
-      const timeout = setTimeout(() => proc.kill(), 30_000);
-      const [exitCode, stdout, stderr] = await Promise.all([
-        proc.exited,
-        new Response(proc.stdout).text(),
-        new Response(proc.stderr).text(),
-      ]);
-      clearTimeout(timeout);
-
-      if (exitCode !== 0) {
-        if (stderr) this.logger.warn(`Branch resolution stderr: ${stderr.trim()}`);
-        this.logger.warn(`Branch resolution failed (exit ${exitCode}), using fallback: ${fallback}`);
+      if (result.exitCode !== 0) {
+        if (result.stderr) this.logger.warn(`Branch resolution stderr: ${result.stderr.trim()}`);
+        this.logger.warn(`Branch resolution failed (exit ${result.exitCode}), using fallback: ${fallback}`);
         return fallback;
       }
 
-      const resolved = parseBranchName(stdout);
+      const resolved = parseBranchName(result.stdout);
       if (!resolved) {
         this.logger.warn(`Branch resolution returned invalid name, using fallback: ${fallback}`);
         return fallback;
@@ -471,52 +466,32 @@ export class Worker {
     }
   }
 
-  private async spawnClaude(
+  private async spawnImplementation(
     prompt: string,
     cwd: string,
     item: QueueItem
   ): Promise<{ stdout: string; stderr: string; exitCode: number }> {
-    const args = [
-      "claude",
-      "-p",
-      prompt,
-      ...this.config.worker.claudeArgs,
-      "--model",
-      this.config.worker.model,
-      "--max-turns",
-      String(this.config.worker.maxTurns),
-    ];
-
+    let systemPrompt: string | undefined;
     if (item.systemPromptFile) {
       const resolvedPath = resolveHomePath(item.systemPromptFile);
       if (existsSync(resolvedPath)) {
-        const content = await Bun.file(resolvedPath).text();
-        args.push("--append-system-prompt", content);
+        systemPrompt = await Bun.file(resolvedPath).text();
         this.logger.info(`Injecting system prompt from ${resolvedPath}`);
       } else {
         this.logger.warn(`systemPromptFile not found: ${resolvedPath}`);
       }
     }
 
-    if (item.allowedTools?.length) {
-      args.push("--allowlist-tools", item.allowedTools.join(","));
-    }
-
     this.logger.info(`Spawning Claude in ${cwd}`);
-    const proc = Bun.spawn(args, {
+    return spawnClaude({
+      prompt,
+      model: this.config.worker.model,
+      outputFormat: "stream-json",
       cwd,
-      stdout: "pipe",
-      stderr: "pipe",
-      env: { ...process.env, TERM: "dumb" },
+      maxTurns: this.config.worker.maxTurns,
+      systemPrompt,
+      allowedTools: item.allowedTools,
     });
-
-    const [exitCode, stdout, stderr] = await Promise.all([
-      proc.exited,
-      new Response(proc.stdout).text(),
-      new Response(proc.stderr).text(),
-    ]);
-
-    return { stdout, stderr, exitCode };
   }
 
   private async getChangedFiles(worktreePath: string): Promise<string[]> {

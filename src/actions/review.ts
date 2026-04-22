@@ -3,6 +3,7 @@ import { join, dirname } from "path";
 import type { Action, PullRequest, RepoConfig, ActionResult } from "../types";
 import type { Logger } from "../logger";
 import { createReviewWorktree, removeReviewWorktree } from "../git";
+import { spawnClaude } from "../claude";
 
 export function buildPrompt(template: string, pr: PullRequest): string {
   return template
@@ -27,8 +28,6 @@ export class ReviewAction implements Action {
   readonly name = "review";
 
   constructor(
-    private readonly command: string,
-    private readonly defaultArgs: string[],
     private readonly reportsDir: string,
     private readonly reviewWorktreeDir: string,
     private readonly logger: Logger
@@ -47,16 +46,13 @@ export class ReviewAction implements Action {
     const worktreeName = `${pr.repo.replace("/", "-")}-PR-${pr.number}`;
     const worktreePath = join(this.reviewWorktreeDir, worktreeName);
 
-    const args = [...this.defaultArgs, prompt];
-
-    // Load review prompt template (reviewPromptFile > systemPromptFile > none)
+    // Build system prompt from review prompt file + automation directive
     const promptFile = repoConfig.reviewPromptFile ?? repoConfig.systemPromptFile;
+    let systemPrompt = AUTOMATION_DIRECTIVE;
     if (promptFile && existsSync(promptFile)) {
       const rawContent = await Bun.file(promptFile).text();
       const content = buildPrompt(rawContent, pr);
-      args.push("--append-system-prompt", AUTOMATION_DIRECTIVE + "\n\n" + content);
-    } else {
-      args.push("--append-system-prompt", AUTOMATION_DIRECTIVE);
+      systemPrompt = AUTOMATION_DIRECTIVE + "\n\n" + content;
     }
 
     this.logger.info(`Reviewing PR #${pr.number} in ${pr.repo} (${pr.author})`);
@@ -72,32 +68,24 @@ export class ReviewAction implements Action {
       useWorktree = false;
     }
 
-    this.logger.debug(`Command: ${this.command} ${args.join(" ").substring(0, 200)}...`);
-
     try {
-      const proc = Bun.spawn([this.command, ...args], {
+      const result = await spawnClaude({
+        prompt,
+        outputFormat: "text",
         cwd: effectiveCwd,
-        stdout: "pipe",
-        stderr: "pipe",
-        env: { ...process.env, TERM: "dumb" },
+        systemPrompt,
       });
 
-      const [exitCode, stdout, stderr] = await Promise.all([
-        proc.exited,
-        new Response(proc.stdout).text(),
-        new Response(proc.stderr).text(),
-      ]);
-
-      if (exitCode !== 0) {
-        const errorDetail = stderr || stdout || "(no output)";
-        this.logger.error(`Review failed for PR #${pr.number} (exit ${exitCode}): ${errorDetail}`);
-        const errorReport = `# Review Failed\n\n**PR:** #${pr.number} - ${pr.title}\n**Exit code:** ${exitCode}\n**Error:**\n\`\`\`\n${errorDetail}\n\`\`\`\n`;
+      if (result.exitCode !== 0) {
+        const errorDetail = result.stderr || result.stdout || "(no output)";
+        this.logger.error(`Review failed for PR #${pr.number} (exit ${result.exitCode}): ${errorDetail}`);
+        const errorReport = `# Review Failed\n\n**PR:** #${pr.number} - ${pr.title}\n**Exit code:** ${result.exitCode}\n**Error:**\n\`\`\`\n${errorDetail}\n\`\`\`\n`;
         await Bun.write(report, errorReport);
         return { action: "review", success: false, message: errorDetail, reportPath: report };
       }
 
       const header = `# Code Review: PR #${pr.number}\n\n**Title:** ${pr.title}\n**Author:** ${pr.author}\n**Branch:** ${pr.headRefName}\n**Repo:** ${pr.repo}\n**URL:** ${pr.url}\n**Reviewed:** ${new Date().toISOString()}\n\n---\n\n`;
-      await Bun.write(report, header + stdout);
+      await Bun.write(report, header + result.stdout);
 
       this.logger.info(`Review saved: ${report}`);
       return { action: "review", success: true, reportPath: report };

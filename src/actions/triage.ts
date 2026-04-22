@@ -1,5 +1,6 @@
 import { mkdirSync } from "fs";
 import { join, dirname } from "path";
+import { spawnClaude } from "../claude";
 import type {
   JiraIssue,
   JiraSourceConfig,
@@ -225,22 +226,19 @@ export class TriageAction {
     this.logger.info(`Triaging ${issue.key}: ${issue.title}`);
 
     const startTime = Date.now();
-    const proc = Bun.spawn(
-      ["claude", "-p", prompt, "--output-format", "json", "--model", this.config.model, "--permission-mode", "auto"],
-      { stdout: "pipe", stderr: "pipe", env: { ...process.env, TERM: "dumb" } }
-    );
-
-    const [exitCode, stdout, stderr] = await Promise.all([
-      proc.exited,
-      new Response(proc.stdout).text(),
-      new Response(proc.stderr).text(),
-    ]);
+    const claudeResult = await spawnClaude({
+      prompt,
+      model: this.config.model,
+      outputFormat: "json",
+    });
     const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
 
-    if (exitCode !== 0) {
-      this.logger.error(`Triage failed for ${issue.key}: ${stderr}`);
-      throw new Error(`Triage claude process exited with code ${exitCode}: ${stderr}`);
+    if (claudeResult.exitCode !== 0) {
+      this.logger.error(`Triage failed for ${issue.key}: ${claudeResult.stderr}`);
+      throw new Error(`Triage claude process exited with code ${claudeResult.exitCode}: ${claudeResult.stderr}`);
     }
+
+    const stdout = claudeResult.stdout;
 
     let resultText = stdout;
     try {

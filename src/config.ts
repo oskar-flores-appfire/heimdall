@@ -14,8 +14,6 @@ export const DEFAULT_CONFIG: HeimdallConfig = {
     notify: { enabled: true, sound: "Glass", maxPerCycle: 5, batchThreshold: 3 },
     review: {
       enabled: true,
-      command: "claude",
-      defaultArgs: ["-p", "--permission-mode", "auto", "--output-format", "text"],
       repos: {},
     },
   },
@@ -32,7 +30,6 @@ export const DEFAULT_CONFIG: HeimdallConfig = {
     model: "opus",
     worktreeDir: `${HEIMDALL_DIR}/worktrees`,
     maxTurns: 100,
-    claudeArgs: ["--permission-mode", "auto", "--output-format", "stream-json", "--verbose"],
   },
   costs: {
     "claude-opus-4-6": { inputPer1k: 0.015, outputPer1k: 0.075 },

@@ -85,8 +85,6 @@ export async function run(): Promise<void> {
   if (config.actions.review.enabled) {
     actions.push(
       new ReviewAction(
-        config.actions.review.command,
-        config.actions.review.defaultArgs,
         resolveHomePath(config.reports.dir),
         resolveHomePath("~/.heimdall/review-worktrees"),
         logger

@@ -73,8 +73,6 @@ export interface ActionsConfig {
   notify: { enabled: boolean; sound: string; maxPerCycle: number; batchThreshold: number };
   review: {
     enabled: boolean;
-    command: string;
-    defaultArgs: string[];
     repos: Record<string, RepoConfig>;
   };
 }
@@ -191,7 +189,6 @@ export interface WorkerConfig {
   model: string;
   worktreeDir: string;
   maxTurns: number;
-  claudeArgs: string[];
 }
 
 export interface CostConfig {
