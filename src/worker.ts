@@ -374,6 +374,10 @@ export class Worker {
     this.logger.info(`Creating worktree: ${worktreePath} (branch: ${branch}) from origin/${defaultBranch}`);
     const fetch = Bun.spawn(["git", "fetch", "origin", defaultBranch], { cwd: repoCwd, stdout: "pipe", stderr: "pipe" });
     await fetch.exited;
+
+    // Clean up stale branch/worktree from a previous failed run
+    await this.cleanupStaleBranch(repoCwd, worktreePath, branch);
+
     const proc = Bun.spawn(
       ["git", "worktree", "add", worktreePath, "-b", branch, `origin/${defaultBranch}`],
       { cwd: repoCwd, stdout: "pipe", stderr: "pipe" }
@@ -386,6 +390,37 @@ export class Worker {
     if (exitCode !== 0) {
       throw new Error(`git worktree add failed: ${stderr}`);
     }
+  }
+
+  private async cleanupStaleBranch(repoCwd: string, worktreePath: string, branch: string): Promise<void> {
+    // Check if branch already exists locally
+    const check = Bun.spawn(
+      ["git", "rev-parse", "--verify", "--quiet", `refs/heads/${branch}`],
+      { cwd: repoCwd, stdout: "pipe", stderr: "pipe" }
+    );
+    if (await check.exited !== 0) return; // branch doesn't exist, nothing to clean
+
+    this.logger.warn(`Cleaning up stale branch from previous run: ${branch}`);
+
+    // Remove stale worktree entry if it exists (e.g. directory was deleted but not pruned)
+    const prune = Bun.spawn(["git", "worktree", "prune"], { cwd: repoCwd, stdout: "pipe", stderr: "pipe" });
+    await prune.exited;
+
+    // Remove the worktree directory if it still exists
+    if (existsSync(worktreePath)) {
+      const remove = Bun.spawn(
+        ["git", "worktree", "remove", worktreePath, "--force"],
+        { cwd: repoCwd, stdout: "pipe", stderr: "pipe" }
+      );
+      await remove.exited;
+    }
+
+    // Delete the stale local branch
+    const del = Bun.spawn(
+      ["git", "branch", "-D", branch],
+      { cwd: repoCwd, stdout: "pipe", stderr: "pipe" }
+    );
+    await del.exited;
   }
 
   private async gatherBranchContext(

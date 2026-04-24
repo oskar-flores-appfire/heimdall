@@ -1,0 +1,7 @@
+Review the following diff for PR #{{pr_number}} in {{repo}}. Apply general code quality, architecture, and best-practice checks. Report findings grouped by severity: FLAGRANT, VIOLATION, SUGGESTION.
+
+You MUST end your response with a VERDICT: PASS or VERDICT: FAIL line (machine-parsed).
+
+```diff
+{{diff}}
+```

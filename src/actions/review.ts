@@ -24,6 +24,31 @@ const AUTOMATION_DIRECTIVE = [
   "Review the code directly in the current working directory and output your findings.",
 ].join(" ");
 
+const VERDICT_INSTRUCTIONS = `
+## Output Requirements
+
+Group findings by severity: FLAGRANT, VIOLATION, SUGGESTION.
+
+CRITICAL — Your response MUST end with a verdict block in EXACTLY this format (this is machine-parsed):
+
+VERDICT: PASS or FAIL
+  Flagrant: <count>
+  Violations: <count>
+  Suggestions: <count>
+
+WHAT'S GOOD:
+- <bullet points>
+
+SUMMARY:
+<one paragraph>
+
+Rules:
+- Any FLAGRANT finding → VERDICT: FAIL
+- 3+ VIOLATIONS → VERDICT: FAIL
+- Otherwise → VERDICT: PASS (with optional conditions in parentheses)
+- The word "VERDICT:" followed by PASS or FAIL must appear verbatim. Do not substitute with "Recommendation", "Result", or any other wording.
+`.trim();
+
 export class ReviewAction implements Action {
   readonly name = "review";
 
@@ -53,6 +78,12 @@ export class ReviewAction implements Action {
       const rawContent = await Bun.file(promptFile).text();
       const content = buildPrompt(rawContent, pr);
       systemPrompt = AUTOMATION_DIRECTIVE + "\n\n" + content;
+    } else {
+      if (promptFile) {
+        this.logger.warn(`Review prompt file not found: ${promptFile} — using built-in verdict instructions`);
+      }
+      // No external prompt file: append built-in verdict instructions so reviews always produce a verdict
+      systemPrompt = AUTOMATION_DIRECTIVE + "\n\n" + VERDICT_INSTRUCTIONS;
     }
 
     this.logger.info(`Reviewing PR #${pr.number} in ${pr.repo} (${pr.author})`);

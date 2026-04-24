@@ -1,0 +1,41 @@
+diff --git a/src/domain/model/ProductId.java b/src/domain/model/ProductId.java
+index abc1234..def5678 100644
+--- a/src/domain/model/ProductId.java
++++ b/src/domain/model/ProductId.java
+@@ -1,8 +1,12 @@
+ package com.example.domain.model;
+
++import com.fasterxml.jackson.annotation.JsonCreator;
++import com.fasterxml.jackson.annotation.JsonValue;
+ import java.util.Objects;
+ import java.util.UUID;
+
+ public record ProductId(UUID value) {
++    @JsonCreator public static ProductId of(String s) { return new ProductId(UUID.fromString(s)); }
++    @JsonValue public String toJson() { return value.toString(); }
+     public ProductId { Objects.requireNonNull(value, "value must not be null"); }
+ }
+diff --git a/src/service/ProductService.java b/src/service/ProductService.java
+index 111aaa..222bbb 100644
+--- a/src/service/ProductService.java
++++ b/src/service/ProductService.java
+@@ -1,10 +1,15 @@
+ package com.example.service;
+
++import com.example.infrastructure.persistence.JpaProductRepository;
+ import com.example.domain.model.Product;
+-import com.example.domain.contract.ProductRepository;
++import java.util.UUID;
+
+ public final class ProductService {
+-    private final ProductRepository repo;
+-    public ProductService(ProductRepository repo) { this.repo = repo; }
+-    public Product find(UUID id) { return repo.findById(id).orElseThrow(); }
++    @org.springframework.beans.factory.annotation.Autowired
++    private JpaProductRepository repo;
++
++    public Product find(String rawId) {
++        System.out.println("Finding product: " + rawId);
++        return repo.findById(UUID.fromString(rawId)).orElseThrow();
++    }
+ }

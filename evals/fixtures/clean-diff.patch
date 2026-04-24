@@ -1,0 +1,12 @@
+diff --git a/src/domain/model/ProductId.java b/src/domain/model/ProductId.java
+index aaa1111..bbb2222 100644
+--- a/src/domain/model/ProductId.java
++++ b/src/domain/model/ProductId.java
+@@ -3,6 +3,7 @@ package com.example.domain.model;
+ import java.util.Objects;
+ import java.util.UUID;
+
++/** Typed identifier for a Product aggregate root. */
+ public record ProductId(UUID value) {
+     public ProductId { Objects.requireNonNull(value, "value must not be null"); }
+ }

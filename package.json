@@ -14,7 +14,9 @@
     "verify": "bun run scripts/verify.ts",
     "notarize:status": "bun run scripts/notarize-status.ts",
     "reset:review": "bun run scripts/reset-review.ts",
-    "reset:issue": "bun run scripts/reset-issue.ts"
+    "reset:issue": "bun run scripts/reset-issue.ts",
+    "eval": "cd evals && npx promptfoo@latest eval",
+    "eval:view": "cd evals && npx promptfoo@latest view"
   },
   "dependencies": {
     "marked": "^18.0.1"

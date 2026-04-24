@@ -1,0 +1,72 @@
+# Heimdall PR Review Eval
+# Verifies that the review prompt reliably produces structured output with a VERDICT.
+#
+# Run:  npx promptfoo@latest eval
+# View: npx promptfoo@latest view
+
+description: "Heimdall review verdict eval"
+
+providers:
+  - id: anthropic:messages:claude-sonnet-4-6
+    config:
+      max_tokens: 4096
+      systemPrompt: file://prompts/review-system.txt
+
+prompts:
+  - file://prompts/review-user.txt
+
+defaultTest:
+  assert:
+    # Structural: VERDICT line must exist
+    - type: contains
+      value: "VERDICT:"
+      metric: has_verdict
+    # Structural: verdict is PASS or FAIL
+    - type: regex
+      value: "VERDICT:\\s*(?:\\*\\*)?\\s*(PASS|FAIL)"
+      metric: valid_verdict_value
+    # Structural: severity sections present
+    - type: contains
+      value: "FLAGRANT"
+      metric: has_flagrant_section
+    - type: contains
+      value: "VIOLATION"
+      metric: has_violation_section
+    - type: contains
+      value: "SUGGESTION"
+      metric: has_suggestion_section
+    # Structural: summary section (model may use "Summary", "SUMMARY:", "## Summary", etc.)
+    - type: icontains
+      value: "summary"
+      metric: has_summary
+
+tests:
+  # --- Test 1: Obvious violations should produce FAIL ---
+  - description: "Diff with Jackson in domain + field injection -> FAIL verdict"
+    vars:
+      pr_number: "999"
+      repo: "test-org/test-repo"
+      diff: file://fixtures/violation-diff.patch
+    assert:
+      - type: regex
+        value: "VERDICT:\\s*(?:\\*\\*)?\\s*FAIL"
+        metric: correct_fail_verdict
+
+  # --- Test 2: Clean refactor should produce PASS ---
+  - description: "Clean sealed-interface refactor -> PASS verdict"
+    vars:
+      pr_number: "1000"
+      repo: "test-org/test-repo"
+      diff: file://fixtures/clean-diff.patch
+    assert:
+      - type: regex
+        value: "VERDICT:\\s*(?:\\*\\*)?\\s*PASS"
+        metric: correct_pass_verdict
+
+  # --- Test 3: Empty diff edge case ---
+  - description: "Empty diff still produces verdict structure"
+    vars:
+      pr_number: "1001"
+      repo: "test-org/test-repo"
+      diff: "(no changes)"
+    # Only defaultTest assertions apply — just verify structure
