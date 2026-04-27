@@ -246,7 +246,10 @@ export class Worker {
     const worktreePath = join(this.worktreeDir, item.issueKey);
 
     try {
-      // Gate 1: Resolve branch name from repo conventions
+      // Gate 1: Pre-flight validation
+      await this.validatePreFlight(item);
+
+      // Gate 2: Resolve branch name from repo conventions
       const branch = await this.resolveBranchName(item);
 
       // Gate 2: Create worktree and push branch for collaboration
@@ -311,6 +314,27 @@ export class Worker {
         summary.size = triageReport.result.size;
       }
 
+      // Save artifacts early so they're preserved even if PR creation fails
+      await this.saveRunArtifacts(item.issueKey, summary, triageContent, claudeResult.stdout, claudeResult.stderr);
+
+      // Gate 3: Verify Claude produced commits before attempting PR
+      const defaultBranch = await this.detectDefaultBranch(worktreePath);
+      const hasCommits = await this.hasCommitsOnBranch(worktreePath, defaultBranch);
+
+      if (!hasCommits) {
+        this.logger.warn(`No commits found for ${item.issueKey} — skipping PR creation`);
+        summary.status = "incomplete";
+        summary.error = `Claude produced no commits for ${item.issueKey}`;
+        await this.saveRunArtifacts(item.issueKey, summary, triageContent, claudeResult.stdout, claudeResult.stderr);
+        await this.queue.update(item.issueKey, {
+          status: "failed",
+          error: summary.error,
+        });
+        await this.notifier.notifyWorkerFailed(item.issueKey, summary.error);
+        this.logger.warn(`Preserving worktree for failed item: ${worktreePath}`);
+        return true;
+      }
+
       const jiraSource = this.config.sources.find((s) => s.type === "jira") as
         | import("./types").JiraSourceConfig
         | undefined;
@@ -319,6 +343,7 @@ export class Worker {
       const prUrl = await this.createDraftPr(item.cwd, branch, prTitle, prBody);
       summary.prUrl = prUrl;
 
+      // Re-save summary with prUrl populated
       await this.saveRunArtifacts(item.issueKey, summary, triageContent, claudeResult.stdout, claudeResult.stderr);
 
       await this.queue.update(item.issueKey, {
@@ -367,6 +392,44 @@ export class Worker {
     );
     const exitCode = await proc.exited;
     return exitCode === 0 ? "main" : "master";
+  }
+
+  private async validatePreFlight(item: QueueItem): Promise<void> {
+    if (!existsSync(item.cwd)) {
+      throw new Error(`Pre-flight failed: cwd does not exist: ${item.cwd}`);
+    }
+
+    const remoteProc = Bun.spawn(
+      ["git", "remote", "get-url", "origin"],
+      { cwd: item.cwd, stdout: "pipe", stderr: "pipe" }
+    );
+    const [remoteExit, , remoteStderr] = await Promise.all([
+      remoteProc.exited,
+      new Response(remoteProc.stdout).text(),
+      new Response(remoteProc.stderr).text(),
+    ]);
+    if (remoteExit !== 0) {
+      throw new Error(
+        `Pre-flight failed: ${item.cwd} is not a git repo with origin remote: ${remoteStderr.trim()}`
+      );
+    }
+
+    const ghProc = Bun.spawn(
+      ["gh", "repo", "view", item.repo, "--json", "name"],
+      { cwd: item.cwd, stdout: "pipe", stderr: "pipe" }
+    );
+    const [ghExit, , ghStderr] = await Promise.all([
+      ghProc.exited,
+      new Response(ghProc.stdout).text(),
+      new Response(ghProc.stderr).text(),
+    ]);
+    if (ghExit !== 0) {
+      throw new Error(
+        `Pre-flight failed: gh cannot access repo ${item.repo}: ${ghStderr.trim()}`
+      );
+    }
+
+    this.logger.info(`Pre-flight checks passed for ${item.issueKey}`);
   }
 
   private async createWorktree(repoCwd: string, worktreePath: string, branch: string): Promise<void> {
@@ -569,6 +632,23 @@ export class Worker {
     if (exitCode !== 0) {
       throw new Error(`git push failed: ${stderr}`);
     }
+  }
+
+  private async hasCommitsOnBranch(worktreePath: string, defaultBranch: string): Promise<boolean> {
+    const proc = Bun.spawn(
+      ["git", "log", `origin/${defaultBranch}..HEAD`, "--oneline"],
+      { cwd: worktreePath, stdout: "pipe", stderr: "pipe" }
+    );
+    const [exitCode, stdout] = await Promise.all([
+      proc.exited,
+      new Response(proc.stdout).text(),
+      new Response(proc.stderr).text(),
+    ]);
+    if (exitCode !== 0) {
+      this.logger.warn(`git log commit check failed (exit ${exitCode}), assuming no commits`);
+      return false;
+    }
+    return stdout.trim().split("\n").filter(Boolean).length > 0;
   }
 
   private async createDraftPr(repoCwd: string, branch: string, title: string, body: string): Promise<string> {
