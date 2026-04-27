@@ -655,10 +655,13 @@ export function startServer(config: HeimdallConfig, logger: Logger, opts?: { con
       if (pathname === "/worker/start" && req.method === "POST") {
         const workerStatus = getWorkerStatus(heimdallDir);
         if (workerStatus.state !== "active") {
-          Bun.spawn(["bun", "run", join(import.meta.dir, "index.ts"), "worker"], {
-            stdout: "ignore",
-            stderr: "ignore",
-          });
+          // Detect compiled binary vs bun script to spawn worker correctly
+          const scriptArg = process.argv[1];
+          const isScript = scriptArg?.endsWith(".ts") || scriptArg?.endsWith(".js");
+          const workerArgs = isScript
+            ? [process.execPath, scriptArg, "worker"]
+            : [process.execPath, "worker"];
+          Bun.spawn(workerArgs, { stdout: "ignore", stderr: "ignore" });
           logger.info("Worker started from web UI");
         }
         return new Response(null, {
