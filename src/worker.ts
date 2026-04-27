@@ -572,12 +572,11 @@ export class Worker {
     let systemPrompt: string | undefined;
     if (item.systemPromptFile) {
       const resolvedPath = resolveHomePath(item.systemPromptFile);
-      if (existsSync(resolvedPath)) {
-        systemPrompt = await Bun.file(resolvedPath).text();
-        this.logger.info(`Injecting system prompt from ${resolvedPath}`);
-      } else {
-        this.logger.warn(`systemPromptFile not found: ${resolvedPath}`);
+      if (!existsSync(resolvedPath)) {
+        throw new Error(`systemPromptFile not found: ${resolvedPath}`);
       }
+      systemPrompt = await Bun.file(resolvedPath).text();
+      this.logger.info(`Injecting system prompt from ${resolvedPath}`);
     }
 
     this.logger.info(`Spawning Claude in ${cwd}`);
